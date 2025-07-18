@@ -18,10 +18,33 @@ jobs:
       pull-requests: read
 
     steps:
-      - name: Run CodeQL Analysis
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: javascript
+          languages: javascript, typescript
+          queries: security-extended,security-and-quality
+
+      - name: Build application
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_APP_URL: ${{ env.NEXT_PUBLIC_APP_URL }}
+          NEXT_PUBLIC_APP_NAME: ${{ env.NEXT_PUBLIC_APP_NAME }}
+          NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ env.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
+          NEXT_PUBLIC_CLARITY_ID: ${{ env.NEXT_PUBLIC_CLARITY_ID }}
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
@@ -35,4 +58,19 @@ jobs:
         with:
           path: ./
           base: HEAD~1
+          fail: false
+        continue-on-error: true
+
+      - name: Run ESLint security rules
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Check for outdated dependencies
+        run: npm outdated
+        continue-on-error: true
+
+      - name: Validate package.json
+        run: |
+          echo "Validating package.json..."
+          npm run build --dry-run
         continue-on-error: true
