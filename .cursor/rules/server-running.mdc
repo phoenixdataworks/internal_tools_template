@@ -1,6 +1,6 @@
 ---
 description:
-globs: *.tsc
+globs: *.tsx
 alwaysApply: false
 ---
 - Do not run the server, it is already running.

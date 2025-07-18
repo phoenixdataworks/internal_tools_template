@@ -2,21 +2,39 @@
 
 ## Overview
 
-Our social media OAuth integration provides secure, team-based authentication for Facebook, Instagram, X (Twitter), Google Analytics 4, and YouTube. The system uses Supabase Vault for encrypted token storage and implements comprehensive security measures.
+Our OAuth integration provides secure, team-based authentication for Microsoft Azure AD and Google Workspace, with comprehensive setup documentation and security best practices. The system uses Supabase Auth for OAuth token management and implements enterprise-grade security measures.
+
+## Documentation
+
+### Setup Guides
+
+- **Microsoft OAuth Setup**: Complete Azure Portal configuration guide (`docs/guides/microsoft-oauth-setup.md`)
+- **Google OAuth Setup**: Comprehensive Google Cloud Console setup guide (`docs/guides/google-oauth-setup.md`)
+- **Guides Overview**: Navigation and troubleshooting reference (`docs/guides/README.md`)
+
+### Key Features
+
+- Step-by-step provider configuration instructions
+- Troubleshooting sections for common OAuth issues
+- Security best practices and production checklists
+- Environment variable configuration examples
+- Domain verification and production deployment guidance
 
 ## Key Architecture Decisions
 
 ### 1. Unified OAuth Pattern
 
-- **Single Flow Structure**: Consistent `/api/oauth/[provider]` pattern across all providers
+- **Single Flow Structure**: Consistent `/api/oauth/[provider]` pattern across Microsoft and Google providers
 - **Provider-Specific Adaptations**: Each provider has unique requirements handled within the common flow
-- **Security-First Design**: PKCE, CSRF protection, and encrypted storage built into the foundation
+- **Security-First Design**: PKCE, CSRF protection, and secure token management built into the foundation
+- **Comprehensive Documentation**: Detailed setup guides for each provider with troubleshooting and best practices
 
-### 2. Supabase Vault Integration
+### 2. Supabase Auth Integration
 
-- **Encrypted at Rest**: All tokens stored using Supabase Vault extension
-- **No Key-in-Database**: Proper key management without storing encryption keys in the database
-- **RLS Integration**: Vault access controlled by Row Level Security policies
+- **Secure Token Management**: OAuth tokens managed through Supabase Auth
+- **Session Management**: JWT-based sessions with automatic refresh
+- **RLS Integration**: User access controlled by Row Level Security policies
+- **Team-Based Access**: All authentication scoped to team membership
 
 ### 3. Team-Based Access Control
 
@@ -26,23 +44,19 @@ Our social media OAuth integration provides secure, team-based authentication fo
 
 ## Provider Architecture Patterns
 
-### Meta Ecosystem (Facebook/Instagram)
+### Microsoft Azure AD
 
-- **Shared Authentication**: Both use the same Meta OAuth App
-- **Hierarchical Tokens**: User tokens → Page tokens → Instagram account access
-- **Permanent Page Tokens**: Facebook page tokens never expire
+- **Enterprise Integration**: Azure Active Directory with organizational accounts
+- **Domain-Based Access**: Support for single-tenant and multi-tenant configurations
+- **Admin Consent**: Required for enterprise permissions and API access
+- **Token Types**: Access tokens and ID tokens with automatic refresh
 
-### Google Ecosystem (YouTube/GA4)
+### Google Workspace
 
-- **PKCE Required**: Enhanced security for public clients
-- **Offline Access**: `access_type=offline` for long-term refresh tokens
-- **Separate Services**: Different redirect URIs for YouTube vs GA4
-
-### X (Twitter)
-
-- **Short-Lived Tokens**: 2-hour expiry requires active refresh management
-- **PKCE Implementation**: Required for OAuth 2.0 with PKCE
-- **Rate Limit Sensitive**: Aggressive rate limiting requires careful handling
+- **Google Cloud Console**: OAuth 2.0 with Google Identity Platform
+- **Workspace Integration**: Support for Google Workspace organizations
+- **Consent Screen**: Configurable for internal or external user access
+- **API Scopes**: Granular permission control for different Google services
 
 ## Security Architecture
 
@@ -56,65 +70,64 @@ Our social media OAuth integration provides secure, team-based authentication fo
 
 ### Token Lifecycle Management
 
-- **Secure Storage**: Encrypted JSON bundles in Supabase Vault
-- **Automatic Refresh**: Built-in expiry detection with configurable buffer
+- **Secure Storage**: OAuth tokens managed through Supabase Auth
+- **Automatic Refresh**: Built-in token refresh with configurable expiry detection
 - **Graceful Degradation**: Proper error handling for expired/invalid tokens
-- **Proper Access Patterns**: Always use views (`team_social_tokens`, `rest_social_tokens`) or functions (`get_social_refresh_token`) to access tokens, never query `social_accounts.refresh_token` directly as this column doesn't exist
+- **Session Management**: JWT-based sessions with automatic renewal
+- **Team Scoping**: All tokens and sessions scoped to team membership
 
 ### Common Implementation Pitfalls
 
-#### ❌ Incorrect Token Access
+#### ❌ Incorrect OAuth Configuration
 
 ```typescript
-// WRONG: This will fail with "column social_accounts.refresh_token does not exist"
-const { data } = await supabase
-  .from('social_accounts')
-  .select('refresh_token, expires_at')
-  .eq('id', accountId);
+// WRONG: Hardcoded credentials in code
+const clientId = 'hardcoded-client-id';
+const clientSecret = 'hardcoded-secret';
 ```
 
-#### ✅ Correct Token Access
+#### ✅ Correct OAuth Configuration
 
 ```typescript
-// CORRECT: Use the team_social_tokens view
-const { data } = await supabase
-  .from('team_social_tokens')
-  .select('refresh_token, expires_at, account_id')
-  .eq('account_id', accountId);
+// CORRECT: Use environment variables
+const clientId = process.env.MICROSOFT_CLIENT_ID;
+const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
 
-// OR use the RPC function
-const { data } = await supabase.rpc('get_social_refresh_token', {
-  account_id: accountId,
-});
+// CORRECT: Follow setup guides for proper configuration
+// See docs/guides/microsoft-oauth-setup.md and docs/guides/google-oauth-setup.md
 ```
 
 ## Integration Points
 
 ### Frontend Integration
 
-- **Integrations Page**: `/settings/integrations` for connection management
-- **Simple Connect Flow**: Single button redirects to OAuth initiation
-- **Real-Time Updates**: React Query for live connection status
+- **Authentication Pages**: `/signin` and `/signup` for OAuth initiation
+- **Simple Connect Flow**: Single button redirects to OAuth provider
+- **Real-Time Updates**: React Query for live authentication status
+- **Team-Based Access**: All authentication scoped to team membership
 
 ### Backend Integration
 
-- **Vault Helpers**: Standardized functions for token operations
-- **Provider Sync**: Automatic syncing of pages/channels/properties
+- **Auth Helpers**: Standardized functions for OAuth operations
+- **Provider Integration**: Microsoft Azure AD and Google Workspace
 - **Error Boundaries**: Comprehensive error handling and user feedback
+- **Setup Guides**: Complete documentation for provider configuration
 
 ## Operational Considerations
 
 ### Monitoring & Observability
 
 - **OAuth Logs**: Detailed logging of all authentication operations
-- **Token Health**: Monitoring expiry and refresh success rates
-- **Provider Status**: Tracking API rate limits and service availability
+- **Session Health**: Monitoring session validity and refresh success rates
+- **Provider Status**: Tracking OAuth provider availability and configuration
+- **Setup Validation**: Comprehensive guides for troubleshooting common issues
 
 ### Maintenance & Updates
 
-- **Provider Changes**: Isolated impact when providers update their APIs
+- **Provider Changes**: Isolated impact when OAuth providers update their APIs
 - **Security Updates**: Centralized security improvements benefit all providers
-- **Documentation**: Single source of truth for OAuth implementation
+- **Documentation**: Comprehensive setup guides with troubleshooting and best practices
+- **Configuration Management**: Environment variable-based configuration for easy updates
 
 ## Key Benefits
 
@@ -128,7 +141,8 @@ const { data } = await supabase.rpc('get_social_refresh_token', {
 
 - **Additional Providers**: Architecture supports easy addition of new OAuth providers
 - **Enhanced Monitoring**: Potential for real-time OAuth health dashboards
-- **Token Optimization**: Opportunities for intelligent caching and refresh strategies
+- **Session Optimization**: Opportunities for intelligent session management strategies
 - **Compliance**: Framework ready for additional security certifications
+- **Documentation Expansion**: Additional guides for advanced OAuth configurations and integrations
 
-This architecture provides a secure, scalable foundation for social media integrations while maintaining flexibility for future enhancements and provider additions.
+This architecture provides a secure, scalable foundation for enterprise OAuth authentication while maintaining flexibility for future enhancements and provider additions.

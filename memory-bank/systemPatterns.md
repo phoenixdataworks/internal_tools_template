@@ -84,6 +84,8 @@ sequenceDiagram
     Supabase-->>Client: Return profile data
 ```
 
+**OAuth Setup Documentation**: Comprehensive guides available in `docs/guides/` for Microsoft Azure AD and Google Workspace configuration
+
 #### HMAC Authentication Pattern
 
 For internal endpoints (cron jobs, webhooks, automated tasks), we use HMAC-SHA256 signature authentication handled in middleware:

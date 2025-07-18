@@ -3,6 +3,7 @@
 ## Architecture Overview
 
 ### Frontend Stack
+
 - **Framework**: Next.js 14 with App Router
 - **Language**: TypeScript throughout
 - **UI Library**: Material-UI (MUI) v5
@@ -11,6 +12,7 @@
 - **Authentication**: Supabase Auth with OAuth providers
 
 ### Backend Stack
+
 - **Database**: PostgreSQL via Supabase
 - **Authentication**: Supabase Auth (Microsoft/Google OAuth)
 - **API**: Supabase Edge Functions + Next.js API routes
@@ -18,6 +20,7 @@
 - **Cloud Functions**: Azure Functions for long-running processes
 
 ### Database Architecture
+
 - **Row Level Security (RLS)**: Team-based data isolation
 - **Encryption**: Connection configurations encrypted at rest
 - **Audit Logging**: Comprehensive tracking of all operations
@@ -27,19 +30,22 @@
 ## Supabase Configuration
 
 ### Key System (Updated 2024)
+
 - **Publishable Key**: `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (replaces anon key)
 - **Service Role Key**: `SUPABASE_SERVICE_ROLE_KEY` (server-side operations)
-- **SDK Versions**: 
+- **SDK Versions**:
   - `@supabase/ssr`: 0.6.1
   - `@supabase/supabase-js`: 2.52.0
 
 ### Client Configuration
+
 - **Browser Client**: Uses publishable key for client-side operations
 - **Server Client**: Uses publishable key for server-side operations with RLS
 - **Service Client**: Uses service role key for elevated privileges
 - **Realtime Client**: Separate client instance for WebSocket connections
 
 ### Migration Notes
+
 - Migrated from `NEXT_PUBLIC_SUPABASE_ANON_KEY` to `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - Updated all client creation functions in `src/lib/supabase/`
 - Updated middleware authentication
@@ -49,6 +55,7 @@
 ## Key Technical Decisions
 
 ### Component Architecture
+
 - **Modular Design**: Reusable components with clear separation
 - **Type Safety**: Comprehensive TypeScript interfaces
 - **Props Pattern**: Consistent prop interfaces across components
@@ -56,12 +63,14 @@
 - **Loading States**: Skeleton screens and progress indicators
 
 ### Data Flow
+
 - **React Query**: Server state management and caching
 - **Optimistic Updates**: Immediate UI feedback
 - **Error Handling**: Graceful degradation and user feedback
 - **Real-time Updates**: WebSocket connections for live data
 
 ### Security Model
+
 - **Team-based Access**: RLS policies for data isolation
 - **OAuth Integration**: Enterprise identity providers
 - **Encrypted Storage**: Sensitive data encryption
@@ -71,6 +80,7 @@
 ## Database Schema Design
 
 ### Core Tables
+
 ```sql
 -- Team-based access control
 teams (id, name, slug, created_at, updated_at)
@@ -91,6 +101,7 @@ audit_logs (id, team_id, user_id, action, table_name, record_id, old_values, new
 ```
 
 ### Custom Types
+
 ```sql
 -- Data source types
 data_source_type: 'snowflake' | 'bigquery' | 'redshift' | 'postgres' | 'mysql' | 'sqlserver'
@@ -106,6 +117,7 @@ model_type: 'forecast' | 'scenario' | 'budget' | 'kpi'
 ## API Design Patterns
 
 ### REST Endpoints
+
 - **Data Sources**: CRUD operations with connection testing
 - **Analytics Queries**: Create, execute, and manage SQL queries
 - **Planning Models**: Build and execute forecasting models
@@ -113,12 +125,14 @@ model_type: 'forecast' | 'scenario' | 'budget' | 'kpi'
 - **Teams**: Team management and access control
 
 ### Edge Functions
+
 - **test-data-source**: Validate data warehouse connections
 - **execute-query**: Run long-running SQL queries
 - **execute-model**: Process planning models
 - **export-results**: Generate CSV/JSON exports
 
 ### Real-time Features
+
 - **Execution Status**: Live updates for query/model execution
 - **Team Activity**: Real-time team member activity
 - **System Alerts**: Notifications for system events
@@ -126,18 +140,21 @@ model_type: 'forecast' | 'scenario' | 'budget' | 'kpi'
 ## Performance Considerations
 
 ### Database Optimization
+
 - **Indexes**: Strategic indexing for common query patterns
 - **Partitioning**: Large tables partitioned by date/team
 - **Connection Pooling**: Efficient database connection management
 - **Query Optimization**: Optimized SQL queries with proper joins
 
 ### Frontend Performance
+
 - **Code Splitting**: Dynamic imports for route-based splitting
 - **Image Optimization**: Next.js Image component for optimized images
 - **Caching**: React Query for intelligent data caching
 - **Bundle Optimization**: Tree shaking and dead code elimination
 
 ### Scalability
+
 - **Horizontal Scaling**: Stateless application design
 - **Database Scaling**: Read replicas for query-heavy workloads
 - **CDN**: Global content delivery for static assets
@@ -146,18 +163,29 @@ model_type: 'forecast' | 'scenario' | 'budget' | 'kpi'
 ## Security Implementation
 
 ### Authentication Flow
+
 1. **OAuth Redirect**: User redirected to Microsoft/Google
 2. **Token Exchange**: Supabase handles OAuth token exchange
 3. **Session Management**: JWT tokens with refresh mechanism
 4. **Team Assignment**: User assigned to teams based on OAuth claims
 
+### OAuth Configuration
+
+- **Microsoft Azure AD**: Enterprise OAuth with Azure Active Directory
+- **Google Workspace**: Google Cloud OAuth with workspace integration
+- **Setup Guides**: Comprehensive documentation in `docs/guides/`
+- **Security**: PKCE, CSRF protection, encrypted token storage
+- **Environment Variables**: Centralized configuration management
+
 ### Authorization Model
+
 - **Team-based Access**: All data scoped to user's teams
 - **Role-based Permissions**: Admin/member roles within teams
 - **Resource-level Security**: Individual resource access control
 - **Audit Logging**: Complete audit trail for compliance
 
 ### Data Protection
+
 - **Encryption at Rest**: Sensitive data encrypted in database
 - **Encryption in Transit**: HTTPS for all communications
 - **Input Validation**: Server-side validation and sanitization
@@ -166,18 +194,21 @@ model_type: 'forecast' | 'scenario' | 'budget' | 'kpi'
 ## Development Workflow
 
 ### Code Quality
+
 - **TypeScript**: Strict type checking throughout
 - **ESLint**: Code quality and consistency rules
 - **Prettier**: Automated code formatting
 - **Pre-commit Hooks**: Quality checks before commits
 
 ### Testing Strategy
+
 - **Unit Tests**: Component and utility function testing
 - **Integration Tests**: API endpoint testing
 - **E2E Tests**: Critical user workflow testing
 - **Performance Tests**: Load testing for scalability
 
 ### Deployment Pipeline
+
 - **CI/CD**: Automated testing and deployment
 - **Environment Management**: Separate dev/staging/prod environments
 - **Database Migrations**: Automated schema updates
@@ -186,18 +217,21 @@ model_type: 'forecast' | 'scenario' | 'budget' | 'kpi'
 ## Monitoring and Observability
 
 ### Application Monitoring
+
 - **Error Tracking**: Comprehensive error logging and alerting
 - **Performance Monitoring**: Response time and throughput tracking
 - **User Analytics**: Usage patterns and feature adoption
 - **Health Checks**: System health monitoring
 
 ### Database Monitoring
+
 - **Query Performance**: Slow query identification and optimization
 - **Connection Monitoring**: Database connection pool health
 - **Storage Monitoring**: Database size and growth tracking
 - **Backup Monitoring**: Automated backup verification
 
 ### Infrastructure Monitoring
+
 - **Resource Utilization**: CPU, memory, and storage monitoring
 - **Network Monitoring**: Latency and bandwidth tracking
 - **Security Monitoring**: Intrusion detection and alerting

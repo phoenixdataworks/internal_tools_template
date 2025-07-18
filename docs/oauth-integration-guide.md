@@ -1,593 +1,749 @@
-# Social Media OAuth Integration Guide
+# Internal Tools Template - OAuth Integration Guide
 
 ## Overview
 
-Our platform provides secure OAuth integration with multiple social media providers to enable teams to connect their accounts and sync analytics data. This guide covers the complete OAuth flow, secure token storage architecture, and implementation details for all supported providers.
+The Internal Tools Template supports multiple OAuth providers for enterprise authentication. This guide covers setting up Azure AD and Google Workspace OAuth integrations with Supabase Auth.
 
 ## Supported Providers
 
-- **Facebook** - Facebook Pages and business accounts
-- **Instagram** - Instagram Business accounts (via Facebook)
-- **X (Twitter)** - Twitter accounts and analytics
-- **Google Analytics 4** - GA4 properties and metrics
-- **YouTube** - YouTube channels and analytics
+### Azure Active Directory (Azure AD)
 
-## Architecture Overview
+- Enterprise SSO integration
+- Group synchronization
+- Custom claims mapping
+- Conditional access policies
 
-### Core Components
+### Google Workspace
 
-1. **OAuth Initiation** (`/api/oauth/[provider]`)
-2. **OAuth Callback** (`/api/oauth/[provider]/callback`)
-3. **Token Refresh** (`/api/oauth/[provider]/refresh`)
-4. **Secure Token Storage** (Supabase Vault)
-5. **Token Management** (Vault helper functions)
+- OAuth 2.0 authentication
+- Directory sync capabilities
+- Custom attributes support
+- Google Cloud Identity integration
 
-### Security Features
+## Azure AD Integration
 
-- **PKCE (Proof Key for Code Exchange)** for X and Google providers
-- **CSRF Protection** using state parameters
-- **Encrypted Token Storage** via Supabase Vault
-- **Row Level Security (RLS)** for team-based access control
-- **Secure Cookie Handling** for OAuth state management
+### 1. Azure Portal Setup
 
-## Database Schema
+#### Create App Registration
 
-### Social Accounts Table
+1. **Navigate to Azure Portal**
+   - Go to [portal.azure.com](https://portal.azure.com)
+   - Sign in with your Azure AD account
 
-```sql
-CREATE TABLE public.social_accounts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    team_id UUID NOT NULL REFERENCES public.teams(id) ON DELETE CASCADE,
-    provider provider NOT NULL, -- enum: facebook, instagram, x, ga4, youtube
-    provider_user_id TEXT NOT NULL,
-    secret_id UUID UNIQUE, -- References vault.secrets for encrypted tokens
-    expires_at TIMESTAMPTZ,
-    scope TEXT,
-    metadata JSONB,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    deleted_at TIMESTAMPTZ DEFAULT NULL,
-    UNIQUE(team_id, provider, provider_user_id)
-);
+2. **Create New App Registration**
+   - Navigate to **Azure Active Directory** → **App registrations**
+   - Click **New registration**
+   - Fill in the details:
+     - **Name**: `Internal Tools Template`
+     - **Supported account types**: Choose based on your needs:
+       - `Accounts in this organizational directory only` (Single tenant)
+       - `Accounts in any organizational directory` (Multi-tenant)
+     - **Redirect URI**: `https://your-project.supabase.co/auth/v1/callback`
+
+3. **Configure Authentication**
+   - Go to **Authentication** in the left menu
+   - Add redirect URIs:
+     - `https://your-project.supabase.co/auth/v1/callback`
+     - `http://localhost:3000/auth/callback` (for development)
+   - Configure advanced settings:
+     - **Access tokens**: Enable
+     - **ID tokens**: Enable
+     - **Logout URL**: `https://your-domain.com/auth/signout`
+
+#### Create Client Secret
+
+1. **Generate Secret**
+   - Go to **Certificates & secrets**
+   - Click **New client secret**
+   - Add description: `Internal Tools Template Secret`
+   - Choose expiration (recommend 12 months)
+   - Copy the **Value** (not the ID)
+
+2. **Store Securely**
+   - Add to your environment variables:
+   ```bash
+   AZURE_CLIENT_ID=your-app-client-id
+   AZURE_CLIENT_SECRET=your-client-secret-value
+   ```
+
+#### Configure API Permissions
+
+1. **Add Permissions**
+   - Go to **API permissions**
+   - Click **Add a permission**
+   - Select **Microsoft Graph**
+   - Choose **Delegated permissions**
+   - Add these permissions:
+     - `User.Read` (Basic profile)
+     - `User.ReadBasic.All` (Directory reading)
+     - `Group.Read.All` (Group membership)
+     - `Directory.Read.All` (Directory data)
+
+2. **Grant Admin Consent**
+   - Click **Grant admin consent for [Your Organization]**
+   - Confirm the permissions
+
+### 2. Supabase Configuration
+
+#### Update Supabase Auth Settings
+
+1. **Configure Azure Provider**
+   - Go to your Supabase project dashboard
+   - Navigate to **Authentication** → **Providers**
+   - Find **Azure** and click **Configure**
+   - Enable the provider
+   - Enter your Azure AD credentials:
+     - **Client ID**: Your Azure app client ID
+     - **Client Secret**: Your Azure client secret
+     - **Tenant ID**: Your Azure AD tenant ID (optional)
+
+2. **Configure Redirect URLs**
+   - In Azure app registration, add:
+     - `https://your-project.supabase.co/auth/v1/callback`
+   - In Supabase, verify the redirect URL is correct
+
+#### Environment Variables
+
+Update your `.env.local`:
+
+```bash
+# Azure AD Configuration
+AZURE_CLIENT_ID=your-azure-client-id
+AZURE_CLIENT_SECRET=your-azure-client-secret
+AZURE_TENANT_ID=your-azure-tenant-id
+
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 ```
 
-### Secure Token Storage
+### 3. Application Integration
 
-Tokens are stored encrypted in Supabase Vault:
+#### Frontend Implementation
 
-```sql
--- Token data structure in vault
-{
-  "access_token": "encrypted_access_token",
-  "refresh_token": "encrypted_refresh_token",
-  "updated_at": "2024-01-01T00:00:00Z"
+```typescript
+// src/lib/auth/azure.ts
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+
+export async function signInWithAzure() {
+  const supabase = createClientComponentClient();
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'azure',
+    options: {
+      scopes: 'email profile openid',
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
+
+  if (error) {
+    console.error('Azure sign-in error:', error);
+    throw error;
+  }
+
+  return data;
 }
-```
 
-## OAuth Flow Implementation
+export async function signOut() {
+  const supabase = createClientComponentClient();
 
-### 1. OAuth Initiation
+  const { error } = await supabase.auth.signOut({
+    scope: 'local',
+  });
 
-**Endpoint**: `GET /api/oauth/[provider]?teamId={teamId}`
-
-**Process**:
-
-1. Validate user authentication and team admin permissions
-2. Generate secure state and PKCE parameters
-3. Build provider-specific authorization URL
-4. Store OAuth state in secure cookies
-5. Redirect user to provider's authorization endpoint
-
-**Security Measures**:
-
-- State parameter for CSRF protection
-- PKCE code challenge for supported providers
-- Secure cookie storage with httpOnly flag
-- Team admin permission validation
-
-### 2. OAuth Callback
-
-**Endpoint**: `GET /api/oauth/[provider]/callback`
-
-**Process**:
-
-1. Validate state parameter against stored cookie
-2. Exchange authorization code for access tokens
-3. Fetch user profile and provider-specific data
-4. Store tokens securely in Supabase Vault
-5. Sync provider-specific resources (pages, channels, etc.)
-6. Redirect to integrations page with success notification
-
-**Token Exchange Examples**:
-
-#### Facebook/Instagram
-
-```javascript
-// Exchange code for short-lived token
-const response = await fetch('https://graph.facebook.com/v23.0/oauth/access_token', {
-  method: 'POST',
-  body: new URLSearchParams({
-    client_id: process.env.META_OAUTH_APP_ID,
-    client_secret: process.env.META_OAUTH_CLIENT_SECRET,
-    redirect_uri: redirectUri,
-    code: authorizationCode,
-  }),
-});
-
-// Exchange for long-lived token
-const longLivedResponse = await fetch(
-  `https://graph.facebook.com/v23.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${clientId}&client_secret=${clientSecret}&fb_exchange_token=${shortLivedToken}`
-);
-```
-
-#### Google (YouTube/GA4)
-
-```javascript
-const response = await fetch('https://oauth2.googleapis.com/token', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({
-    client_id: process.env.GOOGLE_OAUTH_CLIENT_ID,
-    client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
-    code: authorizationCode,
-    code_verifier: codeVerifier, // PKCE
-    redirect_uri: redirectUri,
-    grant_type: 'authorization_code',
-  }),
-});
-```
-
-#### X (Twitter)
-
-```javascript
-const response = await fetch('https://api.twitter.com/2/oauth2/token', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/x-www-form-urlencoded',
-    Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-  },
-  body: new URLSearchParams({
-    code: authorizationCode,
-    code_verifier: codeVerifier, // PKCE
-    redirect_uri: redirectUri,
-    grant_type: 'authorization_code',
-  }),
-});
-```
-
-### 3. Secure Token Storage
-
-**Vault Functions**:
-
-```sql
--- Store tokens securely
-SELECT public.upsert_social_token(
-  p_team_id := 'team-uuid',
-  p_provider := 'facebook',
-  p_provider_user_id := 'provider-user-id',
-  p_access_token := 'access-token',
-  p_refresh_token := 'refresh-token',
-  p_expires_at := '2024-12-31T23:59:59Z',
-  p_scope := 'pages_show_list,pages_read_engagement',
-  p_metadata := '{"email": "user@example.com"}'
-);
-
--- Retrieve tokens securely
-SELECT public.get_social_access_token('account-uuid');
-SELECT public.get_social_refresh_token('account-uuid');
-```
-
-## Provider-Specific Configuration
-
-### Facebook
-
-- **Scopes**: `pages_show_list`, `pages_read_engagement`, `pages_manage_metadata`, `business_management`, `public_profile`
-- **Token Type**: Long-lived user tokens + page tokens
-- **Expiry**: 60 days for user tokens, no expiry for page tokens
-- **Special Notes**:
-  - Requires Facebook App to be Live or user to be a Tester
-  - Page tokens are permanent and don't require refreshing
-  - User token is used to get page-specific access tokens
-  - For Facebook, provider_user_id is the Page ID (not User ID)
-
-**Facebook-Specific Implementation**:
-
-```javascript
-// After getting long-lived user token, fetch pages
-const pagesResponse = await fetch('https://graph.facebook.com/v23.0/me/accounts', {
-  headers: { Authorization: `Bearer ${longLivedUserToken}` },
-});
-
-// Each page gets its own permanent access token
-const pages = await pagesResponse.json();
-for (const page of pages.data) {
-  await upsertSocialToken(
-    supabase,
-    teamId,
-    'facebook',
-    page.id, // Page ID as provider_user_id
-    page.access_token, // Permanent page token
-    longLivedUserToken, // User token as refresh token
-    null, // Page tokens don't expire
-    { name: page.name, category: page.category }
-  );
-}
-```
-
-**Rate Limiting**: Facebook Graph API has a limit of 600 calls per 600 seconds.
-
-### Instagram
-
-- **Scopes**: `instagram_basic`, `instagram_manage_insights`, `pages_show_list`, `pages_read_engagement`, `public_profile`, `pages_manage_metadata`, `business_management`
-- **Token Type**: Uses Facebook authentication
-- **Dependencies**: Requires Facebook Page connection
-- **Special Notes**:
-  - Only works with Instagram Business and Creator accounts
-  - Personal Instagram accounts are not supported
-  - Uses Facebook's Graph API for authentication
-  - Must explicitly request `id` field in API requests
-
-**Instagram-Specific Implementation**:
-
-```javascript
-// Instagram uses Facebook OAuth but fetches Instagram accounts
-// 1. Get Facebook pages first
-const pagesResponse = await fetch('https://graph.facebook.com/v23.0/me/accounts', {
-  headers: { Authorization: `Bearer ${longLivedUserToken}` },
-});
-
-// 2. Check which pages have Instagram accounts
-for (const page of pages.data) {
-  const igResponse = await fetch(
-    `https://graph.facebook.com/v23.0/${page.id}?fields=instagram_business_account`,
-    { headers: { Authorization: `Bearer ${page.access_token}` } }
-  );
-
-  const igData = await igResponse.json();
-  if (igData.instagram_business_account) {
-    // 3. Fetch Instagram account details
-    const igAccountResponse = await fetch(
-      `https://graph.facebook.com/v23.0/${igData.instagram_business_account.id}?fields=id,username,name,biography,followers_count,media_count`,
-      { headers: { Authorization: `Bearer ${page.access_token}` } }
-    );
-
-    const igAccount = await igAccountResponse.json();
-    await upsertSocialToken(
-      supabase,
-      teamId,
-      'instagram',
-      igAccount.id, // Instagram account ID
-      page.access_token, // Page token works for Instagram
-      longLivedUserToken,
-      null,
-      { username: igAccount.username, name: igAccount.name }
-    );
+  if (error) {
+    console.error('Sign-out error:', error);
+    throw error;
   }
 }
 ```
 
-### X (Twitter)
-
-- **Scopes**: `tweet.read`, `users.read`, `follows.read`, `offline.access`
-- **Token Type**: Bearer tokens with refresh capability
-- **Security**: Uses PKCE for enhanced security
-- **Expiry**: 2 hours for access tokens
-- **Special Notes**:
-  - Requires PKCE implementation
-  - Short token expiry requires active refresh management
-  - Uses Basic Auth for token exchange
-
-### Google Analytics 4
-
-- **Scopes**: `https://www.googleapis.com/auth/analytics.readonly`
-- **Token Type**: OAuth 2.0 with refresh tokens
-- **Security**: Uses PKCE
-- **Special Parameters**: `access_type=offline`, `prompt=consent`
-- **Special Notes**:
-  - Fetches GA4 properties immediately after authentication
-  - Stores properties in metadata for later selection
-  - Requires explicit consent prompt for refresh tokens
-
-### YouTube
-
-- **Scopes**: `https://www.googleapis.com/auth/youtube.readonly`, `https://www.googleapis.com/auth/yt-analytics.readonly`
-- **Token Type**: OAuth 2.0 with refresh tokens
-- **Security**: Uses PKCE
-- **Special Parameters**: `access_type=offline`, `prompt=consent`
-
-## Security Implementation
-
-### Row Level Security (RLS)
-
-```sql
--- Team members can read social accounts
-CREATE POLICY "Team members can read social accounts"
-ON public.social_accounts FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM public.team_members tm
-    WHERE tm.team_id = social_accounts.team_id
-    AND tm.user_id = auth.uid()
-  )
-);
-
--- Team admins can manage social accounts
-CREATE POLICY "Team admins can manage social accounts"
-ON public.social_accounts FOR ALL
-USING (
-  EXISTS (
-    SELECT 1 FROM public.team_members tm
-    WHERE tm.team_id = social_accounts.team_id
-    AND tm.user_id = auth.uid()
-    AND tm.role = 'admin'
-  )
-);
-```
-
-### Token Access Control
-
-```sql
--- Secure view for REST API access
-CREATE VIEW public.rest_social_tokens AS
-SELECT account_id, team_id, provider, access_token, refresh_token
-FROM public.team_social_tokens
-WHERE EXISTS (
-  SELECT 1 FROM public.team_members tm
-  WHERE tm.team_id = team_social_tokens.team_id
-  AND tm.user_id = auth.uid()
-);
-```
-
-## Token Management
-
-### Automatic Token Refresh
+#### Auth Callback Handler
 
 ```typescript
-// Check if token needs refresh
-export function tokenNeedsRefresh(expiresIn: number | null, bufferSeconds: number = 120): boolean {
-  if (expiresIn === null) return true;
-  return expiresIn <= bufferSeconds;
-}
+// src/app/auth/callback/route.ts
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server';
 
-// Refresh token workflow
-const { tokens, isExpired } = await getTeamProviderAccount(supabase, teamId, provider);
-if (isExpired || tokenNeedsRefresh(tokens?.expiresIn)) {
-  await refreshProviderToken(provider, tokens?.refresh_token);
+export async function GET(request: NextRequest) {
+  const requestUrl = new URL(request.url);
+  const code = requestUrl.searchParams.get('code');
+
+  if (code) {
+    const supabase = createRouteHandlerClient({ cookies });
+
+    // Exchange code for session
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (error) {
+      console.error('Auth callback error:', error);
+      return NextResponse.redirect(`${requestUrl.origin}/auth/signin?error=auth_callback_failed`);
+    }
+  }
+
+  // Redirect to dashboard
+  return NextResponse.redirect(`${requestUrl.origin}/dashboard`);
 }
 ```
 
-### Token Retrieval
+### 4. User Profile Sync
+
+#### Handle User Creation
 
 ```typescript
-// Get complete account and token data
-const account = await getTeamProviderAccount(supabase, teamId, 'facebook');
+// src/lib/auth/user-sync.ts
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
-// Get specific tokens
-const accessToken = await getAccessToken(supabase, accountId);
-const refreshToken = await getRefreshToken(supabase, accountId);
+export async function syncUserProfile(user: any) {
+  const supabase = createServerComponentClient({ cookies });
+
+  // Extract user data from Azure AD
+  const userData = {
+    id: user.id,
+    email: user.email,
+    full_name: user.user_metadata?.full_name || user.user_metadata?.name,
+    avatar_url: user.user_metadata?.avatar_url,
+    provider: 'azure',
+    provider_id: user.user_metadata?.sub,
+  };
+
+  // Upsert user profile
+  const { error } = await supabase.from('profiles').upsert(userData, {
+    onConflict: 'id',
+  });
+
+  if (error) {
+    console.error('Profile sync error:', error);
+    throw error;
+  }
+
+  return userData;
+}
 ```
 
-## Error Handling
-
-### Common Error Scenarios
-
-1. **Invalid State Parameter**
-   - Cause: CSRF attack or expired cookies
-   - Response: Redirect to error page with security message
-
-2. **Missing Permissions**
-   - Cause: User declined critical permissions
-   - Response: Show specific permission requirements
-
-3. **Token Exchange Failure**
-   - Cause: Invalid code or network issues
-   - Response: Log error and redirect with user-friendly message
-
-4. **Team Permission Issues**
-   - Cause: User not team admin
-   - Response: 403 Forbidden with clear message
-
-5. **Provider Mismatch (Instagram/Facebook)**
-   - Cause: Incorrect redirect URI configuration
-   - Response: Ensure separate redirect URIs for each provider
-
-### Error Logging
+#### Group Synchronization
 
 ```typescript
-// OAuth operation logging
-INSERT INTO public.oauth_logs (
-  operation, team_id, provider, provider_user_id,
-  secret_id, succeeded, details
-) VALUES (
-  'token_exchange', team_id, provider, provider_user_id,
-  secret_id, false, jsonb_build_object('error', error_message)
-);
+// src/lib/auth/group-sync.ts
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+
+export async function syncUserGroups(userId: string, accessToken: string) {
+  const supabase = createServerComponentClient({ cookies });
+
+  try {
+    // Fetch user groups from Microsoft Graph
+    const response = await fetch('https://graph.microsoft.com/v1.0/me/memberOf', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch user groups');
+    }
+
+    const data = await response.json();
+    const groups = data.value || [];
+
+    // Sync groups to your application
+    for (const group of groups) {
+      await syncGroup(group, userId);
+    }
+
+    return groups;
+  } catch (error) {
+    console.error('Group sync error:', error);
+    throw error;
+  }
+}
+
+async function syncGroup(group: any, userId: string) {
+  const supabase = createServerComponentClient({ cookies });
+
+  // Create or update team based on Azure AD group
+  const { data: team, error: teamError } = await supabase
+    .from('teams')
+    .upsert(
+      {
+        name: group.displayName,
+        slug: group.displayName.toLowerCase().replace(/\s+/g, '-'),
+        azure_group_id: group.id,
+      },
+      {
+        onConflict: 'azure_group_id',
+      }
+    )
+    .select()
+    .single();
+
+  if (teamError) {
+    console.error('Team sync error:', teamError);
+    return;
+  }
+
+  // Add user to team
+  const { error: memberError } = await supabase.from('team_members').upsert(
+    {
+      team_id: team.id,
+      user_id: userId,
+      role: 'member',
+    },
+    {
+      onConflict: 'team_id,user_id',
+    }
+  );
+
+  if (memberError) {
+    console.error('Member sync error:', memberError);
+  }
+}
 ```
 
-## Environment Variables
+## Google Workspace Integration
 
-### Required Configuration
+### 1. Google Cloud Console Setup
+
+#### Create OAuth 2.0 Credentials
+
+1. **Access Google Cloud Console**
+   - Go to [console.cloud.google.com](https://console.cloud.google.com)
+   - Create a new project or select existing
+
+2. **Enable APIs**
+   - Go to **APIs & Services** → **Library**
+   - Enable these APIs:
+     - **Google+ API**
+     - **Google Admin SDK API** (for directory sync)
+     - **People API**
+
+3. **Create OAuth 2.0 Client**
+   - Go to **APIs & Services** → **Credentials**
+   - Click **Create Credentials** → **OAuth 2.0 Client IDs**
+   - Configure OAuth consent screen first if prompted
+   - Set up OAuth 2.0 client:
+     - **Application type**: Web application
+     - **Name**: `Internal Tools Template`
+     - **Authorized redirect URIs**:
+       - `https://your-project.supabase.co/auth/v1/callback`
+       - `http://localhost:3000/auth/callback` (development)
+
+4. **Get Credentials**
+   - Copy the **Client ID** and **Client Secret**
+   - Store securely in environment variables
+
+#### Configure OAuth Consent Screen
+
+1. **Set Up Consent Screen**
+   - Go to **OAuth consent screen**
+   - Choose **External** or **Internal** (recommended for enterprise)
+   - Fill in app information:
+     - **App name**: `Internal Tools Template`
+     - **User support email**: Your email
+     - **Developer contact information**: Your email
+
+2. **Add Scopes**
+   - Click **Add or remove scopes**
+   - Add these scopes:
+     - `openid`
+     - `email`
+     - `profile`
+     - `https://www.googleapis.com/auth/admin.directory.user.readonly` (for directory sync)
+
+### 2. Supabase Configuration
+
+#### Update Supabase Auth Settings
+
+1. **Configure Google Provider**
+   - Go to your Supabase project dashboard
+   - Navigate to **Authentication** → **Providers**
+   - Find **Google** and click **Configure**
+   - Enable the provider
+   - Enter your Google credentials:
+     - **Client ID**: Your Google OAuth client ID
+     - **Client Secret**: Your Google OAuth client secret
+
+2. **Verify Redirect URLs**
+   - Ensure the redirect URL matches your Supabase project
+
+#### Environment Variables
+
+Update your `.env.local`:
 
 ```bash
-# Meta (Facebook/Instagram)
-META_OAUTH_APP_ID=your_facebook_app_id
-META_OAUTH_CLIENT_SECRET=your_facebook_app_secret
-META_FACEBOOK_OAUTH_REDIRECT_URI=https://yourdomain.com/api/oauth/facebook/callback
-META_INSTAGRAM_OAUTH_REDIRECT_URI=https://yourdomain.com/api/oauth/instagram/callback
+# Google OAuth Configuration
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
 
-# Google (YouTube/GA4)
-GOOGLE_OAUTH_CLIENT_ID=your_google_client_id
-GOOGLE_OAUTH_CLIENT_SECRET=your_google_client_secret
-GOOGLE_OAUTH_YOUTUBE_REDIRECT_URI=https://yourdomain.com/api/oauth/youtube/callback
-GOOGLE_OAUTH_GA4_REDIRECT_URI=https://yourdomain.com/api/oauth/ga4/callback
-
-# X (Twitter)
-X_OAUTH_CLIENT_ID=your_twitter_client_id
-X_OAUTH_CLIENT_SECRET=your_twitter_client_secret
-X_OAUTH_REDIRECT_URI=https://yourdomain.com/api/oauth/x/callback
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 ```
 
-## Testing and Debugging
+### 3. Application Integration
 
-### OAuth Flow Testing
-
-1. **Test with Admin Users**: Ensure team admin permissions work correctly
-2. **Test Permission Scopes**: Verify all required permissions are requested
-3. **Test Error Scenarios**: Simulate user declining permissions
-4. **Test Token Refresh**: Verify automatic token refresh works
-5. **Test Cross-Provider**: Ensure no interference between providers
-
-### Debugging Tools
+#### Frontend Implementation
 
 ```typescript
-// Enable detailed OAuth logging
-console.log(`[OAuth INIT] Provider: ${provider}, TeamID: ${teamId}`);
-console.log(`[OAuth CALLBACK] Granted scopes: ${grantedScopes}`);
-console.log(`[Vault] Token stored with secretId: ${secretId}`);
-```
+// src/lib/auth/google.ts
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
-### Provider-Specific Debugging
+export async function signInWithGoogle() {
+  const supabase = createClientComponentClient();
 
-#### Facebook/Instagram
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      scopes: 'email profile openid',
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
 
-```typescript
-// Log granted scopes to verify permissions
-const grantedScopes = searchParams.get('granted_scopes');
-console.log(`Facebook granted scopes: ${grantedScopes}`);
+  if (error) {
+    console.error('Google sign-in error:', error);
+    throw error;
+  }
 
-// Check for critical permissions
-const hasShowListScope = grantedScopes?.includes('pages_show_list');
-const hasReadEngagementScope = grantedScopes?.includes('pages_read_engagement');
-if (!hasShowListScope) {
-  console.warn('User did not grant critical permission: pages_show_list');
+  return data;
 }
 ```
 
-**Facebook App Configuration Checklist**:
-
-- App must be Live OR user must be a Tester
-- Required permissions must be in "Advanced Access"
-- Redirect URI must match exactly (including protocol)
-- User must check all permission boxes in consent dialog
-
-#### Instagram Specific
+#### User Profile Sync
 
 ```typescript
-// Always explicitly request ID field
-const igAccountResponse = await fetch(
-  `https://graph.facebook.com/v23.0/${igAccountId}?fields=id,username,name`, // Always include 'id'
-  { headers: { Authorization: `Bearer ${pageToken}` } }
-);
+// src/lib/auth/google-sync.ts
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
-// Validate account has ID before saving
-const igAccount = await igAccountResponse.json();
-if (!igAccount.id) {
-  console.error('Instagram account missing ID field');
-  return;
+export async function syncGoogleUserProfile(user: any) {
+  const supabase = createServerComponentClient({ cookies });
+
+  // Extract user data from Google
+  const userData = {
+    id: user.id,
+    email: user.email,
+    full_name: user.user_metadata?.full_name || user.user_metadata?.name,
+    avatar_url: user.user_metadata?.avatar_url,
+    provider: 'google',
+    provider_id: user.user_metadata?.sub,
+  };
+
+  // Upsert user profile
+  const { error } = await supabase.from('profiles').upsert(userData, {
+    onConflict: 'id',
+  });
+
+  if (error) {
+    console.error('Google profile sync error:', error);
+    throw error;
+  }
+
+  return userData;
 }
 ```
+
+## Multi-Provider Support
+
+### Provider-Agnostic Authentication
+
+```typescript
+// src/lib/auth/multi-provider.ts
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+
+export type AuthProvider = 'azure' | 'google';
+
+export async function signInWithProvider(provider: AuthProvider) {
+  const supabase = createClientComponentClient();
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      scopes: 'email profile openid',
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
+
+  if (error) {
+    console.error(`${provider} sign-in error:`, error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getAvailableProviders(): Promise<AuthProvider[]> {
+  // Check which providers are configured
+  const providers: AuthProvider[] = [];
+
+  if (process.env.AZURE_CLIENT_ID && process.env.AZURE_CLIENT_SECRET) {
+    providers.push('azure');
+  }
+
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    providers.push('google');
+  }
+
+  return providers;
+}
+```
+
+### Provider Selection UI
+
+```typescript
+// src/components/auth/ProviderSelector.tsx
+import { Button, Stack, Typography } from '@mui/material';
+import { signInWithProvider, getAvailableProviders } from '@/lib/auth/multi-provider';
+
+export function ProviderSelector() {
+  const [providers, setProviders] = useState<AuthProvider[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    getAvailableProviders().then(setProviders);
+  }, []);
+
+  const handleProviderSignIn = async (provider: AuthProvider) => {
+    setLoading(true);
+    try {
+      await signInWithProvider(provider);
+    } catch (error) {
+      console.error('Sign-in failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Stack spacing={2}>
+      <Typography variant="h6" align="center">
+        Sign in with your organization
+      </Typography>
+
+      {providers.map((provider) => (
+        <Button
+          key={provider}
+          variant="outlined"
+          size="large"
+          onClick={() => handleProviderSignIn(provider)}
+          disabled={loading}
+          startIcon={
+            provider === 'azure' ? <AzureIcon /> : <GoogleIcon />
+          }
+        >
+          Continue with {provider === 'azure' ? 'Microsoft' : 'Google'}
+        </Button>
+      ))}
+    </Stack>
+  );
+}
+```
+
+## Security Best Practices
+
+### 1. Environment Security
+
+```bash
+# ✅ Good: Use environment variables
+AZURE_CLIENT_ID=your-client-id
+AZURE_CLIENT_SECRET=your-client-secret
+GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-client-secret
+
+# ❌ Bad: Hardcode secrets
+const clientSecret = "my-secret-key";
+```
+
+### 2. Token Management
+
+```typescript
+// ✅ Good: Handle token refresh
+export async function refreshSession() {
+  const supabase = createClientComponentClient();
+
+  const { data, error } = await supabase.auth.refreshSession();
+
+  if (error) {
+    console.error('Token refresh failed:', error);
+    // Redirect to sign-in
+    window.location.href = '/auth/signin';
+  }
+
+  return data;
+}
+
+// ✅ Good: Secure token storage
+export function secureTokenStorage(token: string) {
+  // Store in httpOnly cookies (handled by Supabase)
+  // Never store in localStorage
+}
+```
+
+### 3. Error Handling
+
+```typescript
+// ✅ Good: Comprehensive error handling
+export async function handleAuthError(error: any) {
+  switch (error.message) {
+    case 'Invalid login credentials':
+      return 'Invalid email or password';
+    case 'Email not confirmed':
+      return 'Please check your email to confirm your account';
+    case 'Too many requests':
+      return 'Too many sign-in attempts. Please try again later';
+    default:
+      return 'An unexpected error occurred. Please try again.';
+  }
+}
+```
+
+## Testing OAuth Integration
+
+### 1. Local Testing
+
+```typescript
+// src/lib/auth/test-helpers.ts
+export async function testOAuthFlow(provider: AuthProvider) {
+  const supabase = createClientComponentClient();
+
+  // Test sign-in
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: 'http://localhost:3000/auth/callback',
+    },
+  });
+
+  if (error) {
+    console.error('Test sign-in failed:', error);
+    return false;
+  }
+
+  return true;
+}
+```
+
+### 2. Production Testing
+
+```typescript
+// src/lib/auth/production-test.ts
+export async function validateOAuthConfiguration() {
+  const providers = await getAvailableProviders();
+
+  for (const provider of providers) {
+    try {
+      // Test configuration without full sign-in
+      const isValid = await testProviderConfiguration(provider);
+      console.log(`${provider} configuration:`, isValid ? 'Valid' : 'Invalid');
+    } catch (error) {
+      console.error(`${provider} configuration error:`, error);
+    }
+  }
+}
+```
+
+## Troubleshooting
 
 ### Common Issues
 
-1. **Redirect URI Mismatch**
-   - Ensure exact match in provider app settings
-   - Check for trailing slashes and protocol
-   - Use separate redirect URIs for Facebook and Instagram
+#### 1. Redirect URI Mismatch
 
-2. **Permission Scope Issues**
-   - Verify app has required permissions approved
-   - Check if app is in development vs production mode
-   - For Facebook: Ensure "Advanced Access" is granted for required permissions
+**Error**: `redirect_uri_mismatch`
 
-3. **Token Storage Failures**
-   - Verify Supabase Vault extension is enabled
-   - Check RLS policies allow token storage
-   - Ensure all required parameters are passed to database functions
+**Solution**:
 
-4. **Instagram Business Account Issues**
-   - Verify Instagram account is Business or Creator (not Personal)
-   - Ensure Instagram account is properly connected to Facebook Page
-   - Check that Facebook App has "Instagram Basic Display" product added
+- Verify redirect URIs in both Azure/Google and Supabase
+- Ensure exact match including protocol and port
+- Check for trailing slashes
 
-5. **Missing Account IDs (Instagram)**
-   - Always explicitly request `id` field in API requests
-   - Validate account has ID before database operations
-   - Log full API responses when debugging
+#### 2. Invalid Client Secret
 
-## Troubleshooting Guide
+**Error**: `invalid_client`
 
-### Facebook Issues
+**Solution**:
 
-- **No Pages Found**: User may not have admin access to any Facebook Pages
-- **Permission Denied**: Check if user granted all required permissions in consent dialog
-- **Rate Limiting**: Implement exponential backoff for API calls
+- Regenerate client secret in Azure/Google
+- Update environment variables
+- Verify secret format and encoding
 
-### Instagram Issues
+#### 3. Scope Issues
 
-- **No Instagram Accounts**: User's Facebook Pages may not have connected Instagram Business accounts
-- **API Field Errors**: Always include `id` field explicitly in requests
-- **Personal Account Error**: Instagram Graph API only supports Business/Creator accounts
+**Error**: `invalid_scope`
 
-### Google Issues
+**Solution**:
 
-- **No Refresh Token**: Ensure `access_type=offline` and `prompt=consent` are set
-- **Properties Not Found**: User may not have access to any GA4 properties
-- **PKCE Errors**: Verify code_verifier matches code_challenge
+- Check requested scopes match configured scopes
+- Verify OAuth consent screen configuration
+- Ensure admin consent is granted
 
-### X Issues
+#### 4. Token Refresh Issues
 
-- **PKCE Validation Failed**: Ensure code_verifier is properly generated and stored
-- **Token Expired**: Implement proactive token refresh (2-hour expiry)
-- **Rate Limiting**: Monitor API usage and implement proper backoff
+**Error**: `invalid_grant`
 
-## Best Practices
+**Solution**:
 
-### Security
+- Check token expiration settings
+- Verify refresh token rotation
+- Clear browser storage and retry
 
-- Always use HTTPS in production
-- Implement proper CSRF protection
-- Use secure cookie settings
-- Regularly rotate client secrets
-- Monitor for suspicious OAuth activity
-
-### Performance
-
-- Cache frequently accessed tokens
-- Implement proper error boundaries
-- Use connection pooling for database operations
-- Monitor API rate limits
-
-### Maintenance
-
-- Regularly audit OAuth permissions
-- Monitor token expiry and refresh rates
-- Keep provider SDK versions updated
-- Document any provider-specific quirks
-
-## Integration Examples
-
-### Frontend Integration Button
+### Debug Tools
 
 ```typescript
-const handleConnect = async (provider: Provider) => {
-  const teamId = currentTeam?.id;
-  if (!teamId) return;
+// src/lib/auth/debug.ts
+export function debugAuthFlow() {
+  const supabase = createClientComponentClient();
 
-  // Redirect to OAuth initiation
-  window.location.href = `/api/oauth/${provider}?teamId=${teamId}`;
-};
-```
+  // Monitor auth state changes
+  supabase.auth.onAuthStateChange((event, session) => {
+    console.log('Auth state change:', event, session);
+  });
 
-### Backend Token Usage
-
-```typescript
-// Get tokens for API calls
-const account = await getTeamProviderAccount(supabase, teamId, 'facebook');
-if (account.tokens?.access_token) {
-  const response = await fetch(`https://graph.facebook.com/v23.0/me/accounts`, {
-    headers: { Authorization: `Bearer ${account.tokens.access_token}` },
+  // Check current session
+  supabase.auth.getSession().then(({ data, error }) => {
+    console.log('Current session:', data, error);
   });
 }
 ```
 
-This comprehensive OAuth integration provides secure, scalable social media authentication with proper token management and team-based access control.
+## Monitoring and Logging
+
+### 1. Auth Event Logging
+
+```typescript
+// src/lib/auth/logging.ts
+export function logAuthEvent(event: string, details: any) {
+  console.log(`Auth Event [${event}]:`, {
+    timestamp: new Date().toISOString(),
+    event,
+    details,
+    userAgent: navigator.userAgent,
+    url: window.location.href,
+  });
+
+  // Send to your logging service
+  // sendToLoggingService('auth', event, details);
+}
+```
+
+### 2. Error Tracking
+
+```typescript
+// src/lib/auth/error-tracking.ts
+export function trackAuthError(error: any, context: any) {
+  console.error('Auth Error:', {
+    error: error.message,
+    code: error.status,
+    context,
+    timestamp: new Date().toISOString(),
+  });
+
+  // Send to error tracking service
+  // sendToErrorTracking(error, context);
+}
+```
+
+This OAuth integration guide provides comprehensive coverage for setting up and maintaining OAuth authentication in the Internal Tools Template, ensuring secure and reliable enterprise authentication.

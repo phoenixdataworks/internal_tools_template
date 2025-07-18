@@ -1,492 +1,870 @@
-# StreamTrack - Optimization Guide
+# Internal Tools Template - Performance Optimization Guide
 
-## Performance Optimization
+## Frontend Optimization
 
-### 1. Frontend Optimizations
+### React Component Optimization
 
-#### React Query Configuration
-
-```typescript
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60, // 1 minute
-      cacheTime: 1000 * 60 * 5, // 5 minutes
-      retry: 3,
-      retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
-    },
-  },
-});
-```
-
-#### Component Optimization
+#### 1. Memoization Strategies
 
 ```typescript
-// Memoize expensive components
-const StreamMetrics = React.memo(function StreamMetrics({ data }: Props) {
+// ✅ Good: Use React.memo for expensive components
+import React from 'react';
+
+interface ExpensiveListProps {
+  items: any[];
+  onItemClick: (item: any) => void;
+}
+
+export const ExpensiveList = React.memo<ExpensiveListProps>(({ items, onItemClick }) => {
   return (
-    <ChartComponent
-      data={data}
-      options={chartOptions}
-    />
+    <div>
+      {items.map(item => (
+        <ExpensiveItem key={item.id} item={item} onClick={onItemClick} />
+      ))}
+    </div>
   );
 });
 
-// Use callback for event handlers
-const handleStreamUpdate = useCallback((metrics: StreamMetrics) => {
-  // Handle update
-}, [/* dependencies */]);
+// ✅ Good: Use useMemo for expensive calculations
+export function TeamDashboard({ teamId, data }: { teamId: string; data: any[] }) {
+  const filteredData = useMemo(() =>
+    data.filter(item => item.teamId === teamId),
+    [data, teamId]
+  );
 
-// Virtualize long lists
-const StreamList = () => (
-  <VirtualizedList
-    itemCount={streams.length}
-    itemSize={50}
-    renderItem={({ index }) => (
-      <StreamItem stream={streams[index]} />
-    )}
-  />
-);
+  const sortedData = useMemo(() =>
+    filteredData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [filteredData]
+  );
+
+  return (
+    <div>
+      <ExpensiveList items={sortedData} onItemClick={handleItemClick} />
+    </div>
+  );
+}
+
+// ✅ Good: Use useCallback for event handlers
+export function TeamActions({ teamId, onSuccess }: { teamId: string; onSuccess: () => void }) {
+  const handleDelete = useCallback(async () => {
+    try {
+      await deleteTeam(teamId);
+      onSuccess();
+    } catch (error) {
+      console.error('Failed to delete team:', error);
+    }
+  }, [teamId, onSuccess]);
+
+  const handleUpdate = useCallback(async (updates: any) => {
+    try {
+      await updateTeam(teamId, updates);
+      onSuccess();
+    } catch (error) {
+      console.error('Failed to update team:', error);
+    }
+  }, [teamId, onSuccess]);
+
+  return (
+    <div>
+      <button onClick={handleDelete}>Delete Team</button>
+      <button onClick={() => handleUpdate({ name: 'New Name' })}>Update Team</button>
+    </div>
+  );
+}
 ```
 
-### 2. Database Optimizations
-
-#### Materialized Views
-
-```sql
--- Create materialized view for stream analytics
-CREATE MATERIALIZED VIEW stream_analytics_hourly AS
-SELECT
-    date_trunc('hour', timestamp) as hour,
-    livestream_id,
-    avg(viewer_count) as avg_viewers,
-    max(viewer_count) as peak_viewers,
-    count(*) as data_points
-FROM livestream_metrics
-GROUP BY 1, 2;
-
--- Refresh materialized view
-CREATE OR REPLACE FUNCTION refresh_analytics_view()
-RETURNS trigger AS $$
-BEGIN
-    REFRESH MATERIALIZED VIEW CONCURRENTLY stream_analytics_hourly;
-    RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-```
-
-#### Indexing Strategy
-
-```sql
--- Composite indexes for common queries
-CREATE INDEX idx_metrics_stream_time
-ON livestream_metrics (livestream_id, timestamp DESC);
-
--- Partial indexes for active streams
-CREATE INDEX idx_active_streams
-ON livestreams (id)
-WHERE is_active = true;
-
--- GiST index for timestamp range queries
-CREATE INDEX idx_metrics_timestamp
-ON livestream_metrics USING GIST (
-    tstzrange(timestamp, timestamp, '[]')
-);
-```
-
-### 3. Real-time Optimizations
-
-#### Subscription Management
+#### 2. Code Splitting
 
 ```typescript
-// Efficient subscription handling
-const useStreamSubscription = (streamId: string) => {
-  const supabase = useSupabaseClient();
+// ✅ Good: Lazy load heavy components
+import { lazy, Suspense } from 'react';
+
+const ExpensiveChart = lazy(() => import('@/components/custom/ExpensiveChart'));
+const DataTable = lazy(() => import('@/components/custom/DataTable'));
+
+export function Dashboard() {
+  return (
+    <div>
+      <h1>Dashboard</h1>
+
+      <Suspense fallback={<div>Loading chart...</div>}>
+        <ExpensiveChart />
+      </Suspense>
+
+      <Suspense fallback={<div>Loading table...</div>}>
+        <DataTable />
+      </Suspense>
+    </div>
+  );
+}
+
+// ✅ Good: Route-based code splitting
+// src/app/(authenticated)/analytics/page.tsx
+import { lazy } from 'react';
+
+const AnalyticsDashboard = lazy(() => import('@/components/custom/AnalyticsDashboard'));
+
+export default function AnalyticsPage() {
+  return (
+    <Suspense fallback={<div>Loading analytics...</div>}>
+      <AnalyticsDashboard />
+    </Suspense>
+  );
+}
+```
+
+#### 3. Bundle Optimization
+
+```typescript
+// next.config.mjs
+const nextConfig = {
+  // Enable bundle analyzer
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+      };
+    }
+
+    // Optimize bundle size
+    config.optimization.splitChunks = {
+      chunks: 'all',
+      cacheGroups: {
+        vendor: {
+          test: /[\\/]node_modules[\\/]/,
+          name: 'vendors',
+          chunks: 'all',
+        },
+        common: {
+          name: 'common',
+          minChunks: 2,
+          chunks: 'all',
+          enforce: true,
+        },
+      },
+    };
+
+    return config;
+  },
+
+  // Enable compression
+  compress: true,
+
+  // Optimize images
+  images: {
+    formats: ['image/webp', 'image/avif'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+  },
+};
+```
+
+### State Management Optimization
+
+#### 1. React Query Optimization
+
+```typescript
+// ✅ Good: Optimize React Query usage
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+// Use proper query keys
+const teamKeys = {
+  all: ['teams'] as const,
+  lists: () => [...teamKeys.all, 'list'] as const,
+  list: (filters: string) => [...teamKeys.lists(), { filters }] as const,
+  details: () => [...teamKeys.all, 'detail'] as const,
+  detail: (id: string) => [...teamKeys.details(), id] as const,
+};
+
+// Optimize queries with proper caching
+export function useTeams(filters?: any) {
+  return useQuery({
+    queryKey: teamKeys.list(JSON.stringify(filters)),
+    queryFn: () => fetchTeams(filters),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useTeam(teamId: string) {
+  return useQuery({
+    queryKey: teamKeys.detail(teamId),
+    queryFn: () => fetchTeam(teamId),
+    enabled: !!teamId,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+  });
+}
+
+// Optimize mutations
+export function useUpdateTeam() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: updateTeam,
+    onSuccess: updatedTeam => {
+      // Update cache optimistically
+      queryClient.setQueryData(teamKeys.detail(updatedTeam.id), updatedTeam);
+
+      // Invalidate related queries
+      queryClient.invalidateQueries({ queryKey: teamKeys.lists() });
+    },
+    onError: (error, variables) => {
+      // Revert optimistic update on error
+      queryClient.invalidateQueries({ queryKey: teamKeys.detail(variables.id) });
+    },
+  });
+}
+```
+
+#### 2. Context Optimization
+
+```typescript
+// ✅ Good: Optimize context providers
+import { createContext, useContext, useMemo, useCallback } from 'react';
+
+interface TeamContextValue {
+  currentTeam: Team | null;
+  setCurrentTeam: (team: Team | null) => void;
+  isAdmin: boolean;
+  canEdit: boolean;
+}
+
+const TeamContext = createContext<TeamContextValue | null>(null);
+
+export function TeamProvider({ children }: { children: React.ReactNode }) {
+  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Memoize computed values
+  const isAdmin = useMemo(() => userRole === 'admin', [userRole]);
+  const canEdit = useMemo(() => ['admin', 'editor'].includes(userRole || ''), [userRole]);
+
+  // Memoize context value
+  const value = useMemo(() => ({
+    currentTeam,
+    setCurrentTeam,
+    isAdmin,
+    canEdit,
+  }), [currentTeam, isAdmin, canEdit]);
+
+  return (
+    <TeamContext.Provider value={value}>
+      {children}
+    </TeamContext.Provider>
+  );
+}
+
+// ✅ Good: Custom hook for context
+export function useTeam() {
+  const context = useContext(TeamContext);
+  if (!context) {
+    throw new Error('useTeam must be used within TeamProvider');
+  }
+  return context;
+}
+```
+
+### Real-time Optimization
+
+#### 1. WebSocket Connection Management
+
+```typescript
+// ✅ Good: Optimize real-time subscriptions
+import { useEffect, useRef } from 'react';
+
+export function useTeamRealtime(teamId: string) {
+  const subscriptionRef = useRef<RealtimeChannel | null>(null);
 
   useEffect(() => {
-    const channel = supabase
-      .channel(`stream-${streamId}`)
+    if (!teamId) return;
+
+    // Create subscription
+    const subscription = supabase
+      .channel(`team-${teamId}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
-          table: 'livestream_metrics',
-          filter: `livestream_id=eq.${streamId}`,
+          table: 'teams',
+          filter: `id=eq.${teamId}`,
         },
         payload => {
-          // Process only necessary data
-          const { viewer_count, chat_activity } = payload.new;
-          updateMetrics({ viewer_count, chat_activity });
+          // Handle team updates
+          console.log('Team updated:', payload);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'team_members',
+          filter: `team_id=eq.${teamId}`,
+        },
+        payload => {
+          // Handle member updates
+          console.log('Member updated:', payload);
         }
       )
       .subscribe();
 
+    subscriptionRef.current = subscription;
+
     return () => {
-      channel.unsubscribe();
+      subscription.unsubscribe();
+      subscriptionRef.current = null;
     };
-  }, [streamId]);
-};
-```
+  }, [teamId]);
 
-#### Batch Updates
+  return subscriptionRef.current;
+}
 
-```typescript
-// Batch process metrics updates
-const batchSize = 100;
-const updateQueue: StreamMetric[] = [];
+// ✅ Good: Batch real-time updates
+export function useBatchedUpdates<T>(callback: (updates: T[]) => void) {
+  const batchRef = useRef<T[]>([]);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-const processMetricsBatch = async () => {
-  if (updateQueue.length === 0) return;
+  const addToBatch = useCallback(
+    (update: T) => {
+      batchRef.current.push(update);
 
-  const batch = updateQueue.splice(0, batchSize);
-  await supabase.from('livestream_metrics').insert(batch);
-};
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
 
-// Process batches every 5 seconds
-setInterval(processMetricsBatch, 5000);
-```
+      timeoutRef.current = setTimeout(() => {
+        if (batchRef.current.length > 0) {
+          callback(batchRef.current);
+          batchRef.current = [];
+        }
+      }, 100); // Batch updates within 100ms
+    },
+    [callback]
+  );
 
-### 4. Caching Strategy
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
-#### Edge Caching
-
-```typescript
-// Next.js page with edge caching
-export const getStaticProps: GetStaticProps = async () => {
-  const stats = await getStreamingStats();
-
-  return {
-    props: { stats },
-    revalidate: 60, // Revalidate every minute
-  };
-};
-
-// API route with caching headers
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  res.setHeader('Cache-Control', 's-maxage=60');
-  const data = await getData();
-  res.json(data);
+  return addToBatch;
 }
 ```
 
-#### Client-Side Caching
+## Database Optimization
+
+### Query Optimization
+
+#### 1. Efficient Queries
 
 ```typescript
-// Configure service worker
-const registerServiceWorker = async () => {
-  if ('serviceWorker' in navigator) {
-    try {
-      const registration = await navigator.serviceWorker.register('/sw.js');
-      console.log('SW registered:', registration);
-    } catch (error) {
-      console.log('SW registration failed:', error);
-    }
-  }
-};
+// ✅ Good: Select only needed columns
+const { data: teams } = await supabase
+  .from('teams')
+  .select('id, name, slug, created_at')
+  .eq('id', teamId);
 
-// Service worker caching strategy
-const CACHE_NAME = 'streamtrack-v1';
-const CACHED_URLS = ['/static/charts/', '/static/icons/', '/api/stream-stats'];
+// ✅ Good: Use proper joins
+const { data: teamWithMembers } = await supabase
+  .from('teams')
+  .select(
+    `
+    id,
+    name,
+    slug,
+    team_members!inner(
+      user_id,
+      role,
+      profiles!inner(
+        email,
+        full_name
+      )
+    )
+  `
+  )
+  .eq('id', teamId);
 
-self.addEventListener('fetch', event => {
-  if (event.request.url.includes('/api/stream-stats')) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then(cache => {
-        return fetch(event.request)
-          .then(response => {
-            cache.put(event.request, response.clone());
-            return response;
-          })
-          .catch(() => {
-            return cache.match(event.request);
-          });
-      })
-    );
-  }
-});
+// ✅ Good: Use pagination
+const { data: teams, count } = await supabase
+  .from('teams')
+  .select('*', { count: 'exact' })
+  .range(0, 9)
+  .order('created_at', { ascending: false });
+
+// ✅ Good: Use filters efficiently
+const { data: recentTeams } = await supabase
+  .from('teams')
+  .select('*')
+  .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+  .order('created_at', { ascending: false });
 ```
 
-## Scalability Considerations
-
-### 1. Database Scaling
-
-#### Connection Pooling
-
-```typescript
-// Configure connection pool
-const pool = new Pool({
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
-
-// Use pool for queries
-const getStreamMetrics = async (streamId: string) => {
-  const client = await pool.connect();
-  try {
-    const result = await client.query('SELECT * FROM livestream_metrics WHERE stream_id = $1', [
-      streamId,
-    ]);
-    return result.rows;
-  } finally {
-    client.release();
-  }
-};
-```
-
-#### Table Partitioning
+#### 2. Indexing Strategy
 
 ```sql
--- Partition metrics by month
-CREATE TABLE livestream_metrics (
-    id uuid DEFAULT gen_random_uuid(),
-    livestream_id uuid,
-    timestamp timestamptz,
-    viewer_count integer,
-    PRIMARY KEY (livestream_id, timestamp)
-) PARTITION BY RANGE (timestamp);
+-- ✅ Good: Add indexes for frequently queried columns
+CREATE INDEX idx_teams_created_at ON teams(created_at DESC);
+CREATE INDEX idx_team_members_team_user ON team_members(team_id, user_id);
+CREATE INDEX idx_team_members_user_role ON team_members(user_id, role);
+CREATE INDEX idx_chat_comments_thread_created ON chat_comments(thread_id, created_at DESC);
 
--- Create monthly partitions
-CREATE TABLE livestream_metrics_y2024m01
-PARTITION OF livestream_metrics
-FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+-- ✅ Good: Partial indexes for filtered queries
+CREATE INDEX idx_active_teams ON teams(id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_admin_members ON team_members(team_id, user_id) WHERE role = 'admin';
 
--- Function to create future partitions
-CREATE OR REPLACE FUNCTION create_metrics_partition()
-RETURNS void AS $$
-DECLARE
-    next_month date;
-BEGIN
-    next_month := date_trunc('month', now()) + interval '1 month';
-    EXECUTE format(
-        'CREATE TABLE IF NOT EXISTS livestream_metrics_y%sm%s
-         PARTITION OF livestream_metrics
-         FOR VALUES FROM (%L) TO (%L)',
-        to_char(next_month, 'YYYY'),
-        to_char(next_month, 'MM'),
-        next_month,
-        next_month + interval '1 month'
-    );
-END;
-$$ LANGUAGE plpgsql;
+-- ✅ Good: Composite indexes for complex queries
+CREATE INDEX idx_team_activity ON chat_comments(team_id, created_at DESC, thread_id);
 ```
 
-### 2. Application Scaling
-
-#### Queue Processing
+#### 3. Connection Pooling
 
 ```typescript
-// Message queue for processing
-interface QueueMessage {
-  type: 'METRICS_UPDATE' | 'ALERT' | 'NOTIFICATION';
-  payload: any;
-}
+// ✅ Good: Use connection pooling in production
+// supabase/config.toml
+[api];
+enabled = true;
+port = 54321;
+schemas = ['public', 'storage', 'graphql_public'];
+extra_search_path = ['public', 'extensions'];
+max_rows = (1000)[db];
+port = 54322;
+shadow_port = 54320;
+major_version = (15)[db.pooler];
+enabled = true;
+port = 54329;
+pool_mode = 'transaction';
+default_pool_size = 15;
+max_client_conn = 100;
+```
 
-class MessageQueue {
-  private queue: QueueMessage[] = [];
-  private processing = false;
+### Caching Strategy
 
-  async add(message: QueueMessage) {
-    this.queue.push(message);
-    if (!this.processing) {
-      this.process();
-    }
+#### 1. Application-Level Caching
+
+```typescript
+// ✅ Good: Implement caching utilities
+class CacheManager {
+  private cache = new Map<string, { data: any; timestamp: number; ttl: number }>();
+
+  set(key: string, data: any, ttl: number = 5 * 60 * 1000) {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl,
+    });
   }
 
-  private async process() {
-    this.processing = true;
-    while (this.queue.length > 0) {
-      const message = this.queue.shift();
-      try {
-        await this.handleMessage(message);
-      } catch (error) {
-        console.error('Queue processing error:', error);
+  get(key: string): any | null {
+    const item = this.cache.get(key);
+    if (!item) return null;
+
+    if (Date.now() - item.timestamp > item.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    return item.data;
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+}
+
+const cacheManager = new CacheManager();
+
+// ✅ Good: Use caching in API routes
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const teamId = searchParams.get('teamId');
+
+  if (!teamId) {
+    return NextResponse.json({ error: 'Team ID required' }, { status: 400 });
+  }
+
+  // Check cache first
+  const cacheKey = `team-${teamId}`;
+  const cachedData = cacheManager.get(cacheKey);
+  if (cachedData) {
+    return NextResponse.json(cachedData);
+  }
+
+  // Fetch from database
+  const { data, error } = await supabase.from('teams').select('*').eq('id', teamId).single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Cache the result
+  cacheManager.set(cacheKey, data, 5 * 60 * 1000); // 5 minutes
+
+  return NextResponse.json(data);
+}
+```
+
+#### 2. React Query Caching
+
+```typescript
+// ✅ Good: Configure React Query for optimal caching
+import { QueryClient } from '@tanstack/react-query';
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 10 * 60 * 1000, // 10 minutes
+      retry: (failureCount, error) => {
+        // Don't retry on 4xx errors
+        if (error?.status >= 400 && error?.status < 500) {
+          return false;
+        }
+        return failureCount < 3;
+      },
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+    },
+    mutations: {
+      retry: false,
+    },
+  },
+});
+
+// ✅ Good: Prefetch data
+export function prefetchTeam(teamId: string) {
+  return queryClient.prefetchQuery({
+    queryKey: teamKeys.detail(teamId),
+    queryFn: () => fetchTeam(teamId),
+    staleTime: 10 * 60 * 1000,
+  });
+}
+```
+
+## Network Optimization
+
+### API Optimization
+
+#### 1. Request Batching
+
+```typescript
+// ✅ Good: Batch multiple requests
+export async function batchFetchTeams(teamIds: string[]) {
+  const { data, error } = await supabase.from('teams').select('*').in('id', teamIds);
+
+  if (error) throw error;
+  return data;
+}
+
+// ✅ Good: Use GraphQL for complex queries
+const GET_TEAM_WITH_MEMBERS = `
+  query GetTeamWithMembers($teamId: UUID!) {
+    teams_by_pk(id: $teamId) {
+      id
+      name
+      slug
+      team_members {
+        user_id
+        role
+        profiles {
+          email
+          full_name
+        }
       }
     }
-    this.processing = false;
   }
+`;
 
-  private async handleMessage(message: QueueMessage) {
-    switch (message.type) {
-      case 'METRICS_UPDATE':
-        await processMetricsUpdate(message.payload);
-        break;
-      case 'ALERT':
-        await sendAlert(message.payload);
-        break;
-      case 'NOTIFICATION':
-        await sendNotification(message.payload);
-        break;
-    }
-  }
+export async function fetchTeamWithMembers(teamId: string) {
+  const { data, error } = await supabase.rpc('graphql', {
+    query: GET_TEAM_WITH_MEMBERS,
+    variables: { teamId },
+  });
+
+  if (error) throw error;
+  return data;
 }
 ```
 
-#### Load Balancing
+#### 2. Response Compression
 
 ```typescript
-// Configure load balancer health check
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    version: process.env.APP_VERSION,
-  });
-}
+// ✅ Good: Enable compression in Next.js
+// next.config.mjs
+const nextConfig = {
+  compress: true,
+  poweredByHeader: false,
 
-// Handle graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received');
-
-  // Close database connections
-  await pool.end();
-
-  // Close WebSocket connections
-  await closeWebSocketConnections();
-
-  // Stop accepting new requests
-  server.close(() => {
-    console.log('Server shutdown complete');
-    process.exit(0);
-  });
-});
-```
-
-### 3. Monitoring & Alerts
-
-#### Performance Monitoring
-
-```typescript
-// Track performance metrics
-const metrics = {
-  requestDuration: new Histogram({
-    name: 'http_request_duration_seconds',
-    help: 'Duration of HTTP requests in seconds',
-    labelNames: ['method', 'route', 'status'],
-    buckets: [0.1, 0.5, 1, 2, 5],
-  }),
-
-  activeConnections: new Gauge({
-    name: 'websocket_connections_active',
-    help: 'Number of active WebSocket connections',
-  }),
-
-  errorRate: new Counter({
-    name: 'application_errors_total',
-    help: 'Total number of application errors',
-    labelNames: ['type'],
-  }),
-};
-
-// Middleware for request tracking
-const trackRequestDuration = async (
-  req: NextApiRequest,
-  res: NextApiResponse,
-  next: () => void
-) => {
-  const start = process.hrtime();
-
-  res.on('finish', () => {
-    const duration = process.hrtime(start);
-    metrics.requestDuration.observe(
+  // Optimize headers
+  async headers() {
+    return [
       {
-        method: req.method,
-        route: req.url,
-        status: res.statusCode,
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=300, stale-while-revalidate=600',
+          },
+        ],
       },
-      duration[0] + duration[1] / 1e9
-    );
-  });
-
-  await next();
+    ];
+  },
 };
 ```
 
-#### Alert System
+### Asset Optimization
+
+#### 1. Image Optimization
 
 ```typescript
-interface Alert {
-  level: 'info' | 'warning' | 'error';
-  message: string;
-  metadata: Record<string, any>;
+// ✅ Good: Use Next.js Image component
+import Image from 'next/image';
+
+export function TeamLogo({ team, size = 64 }: { team: Team; size?: number }) {
+  return (
+    <Image
+      src={team.logo_url || '/default-team-logo.png'}
+      alt={`${team.name} logo`}
+      width={size}
+      height={size}
+      className="rounded-full"
+      priority={size > 100} // Prioritize larger images
+    />
+  );
 }
 
-class AlertSystem {
-  private static readonly ALERT_THRESHOLDS = {
-    errorRate: 0.05, // 5% error rate
-    responseTime: 1000, // 1 second
-    memoryUsage: 0.9, // 90% usage
-  };
-
-  async checkSystem(): Promise<Alert[]> {
-    const alerts: Alert[] = [];
-
-    // Check error rate
-    const errorRate = await this.getErrorRate();
-    if (errorRate > AlertSystem.ALERT_THRESHOLDS.errorRate) {
-      alerts.push({
-        level: 'error',
-        message: 'High error rate detected',
-        metadata: { errorRate },
-      });
-    }
-
-    // Check response time
-    const responseTime = await this.getAverageResponseTime();
-    if (responseTime > AlertSystem.ALERT_THRESHOLDS.responseTime) {
-      alerts.push({
-        level: 'warning',
-        message: 'Slow response time detected',
-        metadata: { responseTime },
-      });
-    }
-
-    // Check memory usage
-    const memoryUsage = process.memoryUsage().heapUsed / process.memoryUsage().heapTotal;
-    if (memoryUsage > AlertSystem.ALERT_THRESHOLDS.memoryUsage) {
-      alerts.push({
-        level: 'warning',
-        message: 'High memory usage detected',
-        metadata: { memoryUsage },
-      });
-    }
-
-    return alerts;
-  }
+// ✅ Good: Optimize image loading
+export function OptimizedImageGrid({ images }: { images: string[] }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {images.map((src, index) => (
+        <Image
+          key={src}
+          src={src}
+          alt={`Image ${index + 1}`}
+          width={200}
+          height={200}
+          className="object-cover rounded"
+          loading={index < 4 ? 'eager' : 'lazy'} // Load first 4 images eagerly
+        />
+      ))}
+    </div>
+  );
 }
 ```
 
-## Best Practices
+#### 2. Font Optimization
 
-### 1. Performance
+```typescript
+// ✅ Good: Optimize font loading
+import { Inter, Roboto } from 'next/font/google';
 
-- Use appropriate caching strategies
-- Implement connection pooling
-- Optimize database queries
-- Use efficient data structures
-- Implement proper error handling
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+});
 
-### 2. Scalability
+const roboto = Roboto({
+  weight: ['400', '500', '700'],
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-roboto',
+});
 
-- Design for horizontal scaling
-- Implement proper partitioning
-- Use message queues for async operations
-- Implement proper load balancing
-- Plan for failover scenarios
+// ✅ Good: Use in layout
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className={`${inter.variable} ${roboto.variable}`}>
+      <body className="font-sans">
+        {children}
+      </body>
+    </html>
+  );
+}
+```
 
-### 3. Monitoring
+## Monitoring and Analytics
 
-- Track key performance metrics
-- Set up proper alerting
-- Monitor resource usage
-- Track error rates
-- Implement proper logging
+### Performance Monitoring
 
-### 4. Maintenance
+#### 1. Core Web Vitals
 
-- Regular performance audits
-- Database maintenance
-- Cache invalidation strategy
-- Resource cleanup
-- Regular backups
+```typescript
+// ✅ Good: Monitor Core Web Vitals
+import { useEffect } from 'react';
+
+export function usePerformanceMonitoring() {
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'PerformanceObserver' in window) {
+      // Monitor Largest Contentful Paint (LCP)
+      const lcpObserver = new PerformanceObserver(list => {
+        const entries = list.getEntries();
+        const lastEntry = entries[entries.length - 1];
+        console.log('LCP:', lastEntry.startTime);
+
+        // Send to analytics
+        if (lastEntry.startTime > 2500) {
+          console.warn('LCP is too slow:', lastEntry.startTime);
+        }
+      });
+      lcpObserver.observe({ entryTypes: ['largest-contentful-paint'] });
+
+      // Monitor First Input Delay (FID)
+      const fidObserver = new PerformanceObserver(list => {
+        const entries = list.getEntries();
+        entries.forEach(entry => {
+          console.log('FID:', entry.processingStart - entry.startTime);
+        });
+      });
+      fidObserver.observe({ entryTypes: ['first-input'] });
+
+      // Monitor Cumulative Layout Shift (CLS)
+      const clsObserver = new PerformanceObserver(list => {
+        let clsValue = 0;
+        const entries = list.getEntries();
+        entries.forEach((entry: any) => {
+          if (!entry.hadRecentInput) {
+            clsValue += entry.value;
+          }
+        });
+        console.log('CLS:', clsValue);
+      });
+      clsObserver.observe({ entryTypes: ['layout-shift'] });
+
+      return () => {
+        lcpObserver.disconnect();
+        fidObserver.disconnect();
+        clsObserver.disconnect();
+      };
+    }
+  }, []);
+}
+```
+
+#### 2. Custom Performance Metrics
+
+```typescript
+// ✅ Good: Track custom performance metrics
+export function useCustomMetrics() {
+  const trackMetric = useCallback((name: string, value: number) => {
+    if (typeof window !== 'undefined') {
+      // Send to analytics service
+      console.log(`Metric: ${name} = ${value}`);
+
+      // Use Performance API
+      performance.mark(`${name}-start`);
+      performance.measure(name, `${name}-start`);
+    }
+  }, []);
+
+  const trackApiCall = useCallback(
+    async (name: string, apiCall: () => Promise<any>) => {
+      const start = performance.now();
+      try {
+        const result = await apiCall();
+        const duration = performance.now() - start;
+        trackMetric(`${name}-success`, duration);
+        return result;
+      } catch (error) {
+        const duration = performance.now() - start;
+        trackMetric(`${name}-error`, duration);
+        throw error;
+      }
+    },
+    [trackMetric]
+  );
+
+  return { trackMetric, trackApiCall };
+}
+```
+
+### Error Tracking
+
+```typescript
+// ✅ Good: Comprehensive error tracking
+export function useErrorTracking() {
+  const trackError = useCallback((error: Error, context?: any) => {
+    console.error('Error tracked:', {
+      message: error.message,
+      stack: error.stack,
+      context,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      url: window.location.href,
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      trackError(new Error(event.reason), { type: 'unhandled-rejection' });
+    };
+
+    const handleError = (event: ErrorEvent) => {
+      trackError(event.error, { type: 'error-event' });
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    window.addEventListener('error', handleError);
+
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener('error', handleError);
+    };
+  }, [trackError]);
+
+  return { trackError };
+}
+```
+
+## Best Practices Summary
+
+### Performance Checklist
+
+- [ ] **React Optimization**
+  - [ ] Use React.memo for expensive components
+  - [ ] Implement useMemo and useCallback appropriately
+  - [ ] Lazy load heavy components
+  - [ ] Optimize re-renders
+
+- [ ] **State Management**
+  - [ ] Configure React Query caching properly
+  - [ ] Optimize context providers
+  - [ ] Use proper query keys
+  - [ ] Implement optimistic updates
+
+- [ ] **Database**
+  - [ ] Add appropriate indexes
+  - [ ] Use efficient queries
+  - [ ] Implement connection pooling
+  - [ ] Use pagination for large datasets
+
+- [ ] **Network**
+  - [ ] Enable compression
+  - [ ] Implement caching strategies
+  - [ ] Optimize API responses
+  - [ ] Use CDN for static assets
+
+- [ ] **Monitoring**
+  - [ ] Track Core Web Vitals
+  - [ ] Monitor custom metrics
+  - [ ] Implement error tracking
+  - [ ] Set up performance alerts
+
+### Performance Targets
+
+- **Page Load Time**: < 2 seconds
+- **Time to Interactive**: < 3 seconds
+- **First Contentful Paint**: < 1.5 seconds
+- **Largest Contentful Paint**: < 2.5 seconds
+- **Cumulative Layout Shift**: < 0.1
+- **First Input Delay**: < 100ms
+- **API Response Time**: < 200ms
+- **Database Query Time**: < 100ms
+
+This optimization guide provides comprehensive strategies for optimizing the performance of internal tools built with this template, ensuring fast, responsive, and scalable applications.

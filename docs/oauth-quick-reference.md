@@ -1,173 +1,222 @@
-# OAuth Quick Reference
+# Internal Tools Template - OAuth Quick Reference
 
-## Environment Variables Checklist
+## Quick Setup Checklist
 
-```bash
-# Meta (Facebook/Instagram)
-META_OAUTH_APP_ID=
-META_OAUTH_CLIENT_SECRET=
-META_FACEBOOK_OAUTH_REDIRECT_URI=https://yourdomain.com/api/oauth/facebook/callback
-META_INSTAGRAM_OAUTH_REDIRECT_URI=https://yourdomain.com/api/oauth/instagram/callback
+### Azure AD Setup
 
-# Google (YouTube/GA4)
-GOOGLE_OAUTH_CLIENT_ID=
-GOOGLE_OAUTH_CLIENT_SECRET=
-GOOGLE_OAUTH_YOUTUBE_REDIRECT_URI=https://yourdomain.com/api/oauth/youtube/callback
-GOOGLE_OAUTH_GA4_REDIRECT_URI=https://yourdomain.com/api/oauth/ga4/callback
+- [ ] **Azure Portal**
+  - [ ] Create app registration
+  - [ ] Configure redirect URIs
+  - [ ] Generate client secret
+  - [ ] Add API permissions
+  - [ ] Grant admin consent
 
-# X (Twitter)
-X_OAUTH_CLIENT_ID=
-X_OAUTH_CLIENT_SECRET=
-X_OAUTH_REDIRECT_URI=https://yourdomain.com/api/oauth/x/callback
+- [ ] **Supabase Configuration**
+  - [ ] Enable Azure provider
+  - [ ] Add client ID and secret
+  - [ ] Configure redirect URL
+
+- [ ] **Environment Variables**
+  ```bash
+  AZURE_CLIENT_ID=your-azure-client-id
+  AZURE_CLIENT_SECRET=your-azure-client-secret
+  AZURE_TENANT_ID=your-azure-tenant-id
+  ```
+
+### Google Workspace Setup
+
+- [ ] **Google Cloud Console**
+  - [ ] Create OAuth 2.0 client
+  - [ ] Configure consent screen
+  - [ ] Add redirect URIs
+  - [ ] Enable required APIs
+
+- [ ] **Supabase Configuration**
+  - [ ] Enable Google provider
+  - [ ] Add client ID and secret
+  - [ ] Configure redirect URL
+
+- [ ] **Environment Variables**
+  ```bash
+  GOOGLE_CLIENT_ID=your-google-client-id
+  GOOGLE_CLIENT_SECRET=your-google-client-secret
+  ```
+
+## Redirect URIs
+
+### Development
+
+```
+http://localhost:3000/auth/callback
 ```
 
-## Provider Scopes
+### Production
 
-| Provider               | Required Scopes                                                                                                                                              |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Facebook**           | `pages_show_list`, `pages_read_engagement`, `pages_manage_metadata`, `business_management`, `public_profile`                                                 |
-| **Instagram**          | `instagram_basic`, `instagram_manage_insights`, `pages_show_list`, `pages_read_engagement`, `public_profile`, `pages_manage_metadata`, `business_management` |
-| **X (Twitter)**        | `tweet.read`, `users.read`, `follows.read`, `offline.access`                                                                                                 |
-| **Google Analytics 4** | `https://www.googleapis.com/auth/analytics.readonly`                                                                                                         |
-| **YouTube**            | `https://www.googleapis.com/auth/youtube.readonly`, `https://www.googleapis.com/auth/yt-analytics.readonly`                                                  |
+```
+https://your-project.supabase.co/auth/v1/callback
+https://your-domain.com/auth/callback
+```
 
-## Token Expiry & Refresh
+## Required Scopes
 
-| Provider                 | Access Token Expiry          | Refresh Token | Notes                        |
-| ------------------------ | ---------------------------- | ------------- | ---------------------------- |
-| **Facebook**             | 60 days (user), Never (page) | User token    | Page tokens are permanent    |
-| **Instagram**            | 60 days                      | User token    | Uses Facebook authentication |
-| **X (Twitter)**          | 2 hours                      | Yes           | Requires active refresh      |
-| **Google (GA4/YouTube)** | 1 hour                       | Yes           | Long-lived refresh tokens    |
+### Azure AD
+
+- `openid`
+- `email`
+- `profile`
+- `User.Read`
+- `User.ReadBasic.All`
+- `Group.Read.All`
+- `Directory.Read.All`
+
+### Google Workspace
+
+- `openid`
+- `email`
+- `profile`
+- `https://www.googleapis.com/auth/admin.directory.user.readonly`
+
+## Environment Variables Reference
+
+```bash
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+
+# Azure AD Configuration
+AZURE_CLIENT_ID=your-azure-client-id
+AZURE_CLIENT_SECRET=your-azure-client-secret
+AZURE_TENANT_ID=your-azure-tenant-id
+
+# Google OAuth Configuration
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# Application Configuration
+NEXT_PUBLIC_APP_URL=https://your-domain.com
+NEXTAUTH_URL=https://your-domain.com
+NEXTAUTH_SECRET=your-nextauth-secret
+```
 
 ## Common Error Codes
 
-| Error                   | Cause                          | Solution                               |
-| ----------------------- | ------------------------------ | -------------------------------------- |
-| `invalid_state`         | CSRF protection failed         | Check state parameter matches cookie   |
-| `access_denied`         | User declined permissions      | Show permission requirements           |
-| `redirect_uri_mismatch` | URI doesn't match app settings | Verify exact match in provider console |
-| `invalid_grant`         | Code expired/invalid           | Regenerate authorization flow          |
-| `insufficient_scope`    | Missing required permissions   | Check granted_scopes parameter         |
+| Error Code              | Description                | Solution                                 |
+| ----------------------- | -------------------------- | ---------------------------------------- |
+| `redirect_uri_mismatch` | Redirect URI doesn't match | Check URIs in both provider and Supabase |
+| `invalid_client`        | Invalid client credentials | Regenerate client secret                 |
+| `invalid_scope`         | Invalid or missing scopes  | Verify scope configuration               |
+| `access_denied`         | User denied permission     | Check consent screen                     |
+| `invalid_grant`         | Token refresh failed       | Clear browser storage                    |
 
-## Quick Code Snippets
-
-### Initiate OAuth Flow
-
-```typescript
-const handleConnect = (provider: Provider) => {
-  const teamId = currentTeam?.id;
-  window.location.href = `/api/oauth/${provider}?teamId=${teamId}`;
-};
-```
-
-### Get Team Tokens
-
-```typescript
-import { getTeamProviderAccount } from '@/lib/supabase/vault';
-
-const account = await getTeamProviderAccount(supabase, teamId, 'facebook');
-if (account.tokens?.access_token) {
-  // Use token for API calls
-}
-```
-
-### Check Token Expiry
-
-```typescript
-import { tokenNeedsRefresh } from '@/lib/supabase/vault';
-
-if (tokenNeedsRefresh(account.expiresIn, 120)) {
-  // Refresh token before use
-}
-```
-
-## Testing Checklist
-
-### Pre-Flight Checks
-
-- [ ] Environment variables set correctly
-- [ ] Redirect URIs match provider app settings exactly
-- [ ] Provider app is Live or user is a Tester
-- [ ] Required permissions have "Advanced Access" (Facebook)
-- [ ] Team admin permissions working
-
-### Flow Testing
-
-- [ ] OAuth initiation redirects correctly
-- [ ] User can grant permissions
-- [ ] Callback processes successfully
-- [ ] Tokens stored in vault
-- [ ] Provider-specific resources sync
-- [ ] Error scenarios handled gracefully
-
-### Provider-Specific Checks
-
-#### Facebook
-
-- [ ] App has required permissions in "Advanced Access"
-- [ ] User has admin access to Facebook Pages
-- [ ] `granted_scopes` parameter logged and verified
-
-#### Instagram
-
-- [ ] Instagram accounts are Business/Creator (not Personal)
-- [ ] Instagram accounts connected to Facebook Pages
-- [ ] `id` field explicitly requested in API calls
-
-#### Google
-
-- [ ] `access_type=offline` and `prompt=consent` set
-- [ ] Refresh tokens received and stored
-- [ ] Properties/channels fetched successfully
-
-#### X (Twitter)
-
-- [ ] PKCE implementation working
-- [ ] Token refresh mechanism active
-- [ ] Rate limiting handled
-
-## Debugging Commands
+## Testing Commands
 
 ```bash
+# Test Azure AD connection
+npm run test:auth:azure
+
+# Test Google OAuth connection
+npm run test:auth:google
+
+# Validate OAuth configuration
+npm run auth:validate
+
 # Check environment variables
-echo $META_OAUTH_APP_ID
-echo $GOOGLE_OAUTH_CLIENT_ID
-
-# Test redirect URIs
-curl -I "https://yourdomain.com/api/oauth/facebook/callback"
-
-# Check database
-psql -c "SELECT provider, COUNT(*) FROM social_accounts GROUP BY provider;"
+npm run env:check
 ```
-
-## Rate Limits
-
-| Provider        | Limit        | Window      |
-| --------------- | ------------ | ----------- |
-| **Facebook**    | 600 calls    | 600 seconds |
-| **Instagram**   | 600 calls    | 600 seconds |
-| **X (Twitter)** | 300 requests | 15 minutes  |
-| **Google**      | 100 requests | 100 seconds |
 
 ## Security Checklist
 
-- [ ] HTTPS enabled in production
-- [ ] Secure cookie settings configured
-- [ ] State parameters validated
-- [ ] PKCE implemented for supported providers
-- [ ] RLS policies active on social_accounts table
-- [ ] Vault extension enabled
-- [ ] Team admin permissions enforced
+- [ ] **Client Secrets**
+  - [ ] Never commit to version control
+  - [ ] Use environment variables
+  - [ ] Rotate regularly
 
-## Common Issues & Quick Fixes
+- [ ] **Redirect URIs**
+  - [ ] Use HTTPS in production
+  - [ ] Validate exact matches
+  - [ ] Remove unused URIs
 
-| Issue               | Quick Fix                                    |
-| ------------------- | -------------------------------------------- |
-| "Provider mismatch" | Check redirect URI configuration             |
-| "No pages found"    | Verify user has admin access to pages        |
-| "Missing ID field"  | Always include `id` in API field requests    |
-| "Token expired"     | Implement proactive refresh with buffer time |
-| "Permission denied" | Check if all required scopes were granted    |
+- [ ] **Scopes**
+  - [ ] Request minimum required scopes
+  - [ ] Document scope usage
+  - [ ] Review permissions regularly
 
-For detailed implementation, see [OAuth Integration Guide](./oauth-integration-guide.md)
+- [ ] **Token Security**
+  - [ ] Store tokens securely
+  - [ ] Implement token refresh
+  - [ ] Handle token expiration
+
+## Troubleshooting Commands
+
+```bash
+# Check Supabase status
+npm run supabase:status
+
+# Reset local database
+npm run supabase:db:reset
+
+# View auth logs
+npm run auth:logs
+
+# Test OAuth flow
+npm run auth:test
+```
+
+## Provider-Specific Notes
+
+### Azure AD
+
+- Requires admin consent for directory permissions
+- Supports conditional access policies
+- Group sync requires additional API permissions
+- Tenant ID is optional for single-tenant apps
+
+### Google Workspace
+
+- Requires domain verification for internal apps
+- Supports service account authentication
+- Directory sync requires Admin SDK API
+- Consent screen must be configured
+
+## Migration Checklist
+
+### From Local to Production
+
+- [ ] Update redirect URIs
+- [ ] Configure production environment variables
+- [ ] Test OAuth flow in production
+- [ ] Verify user profile sync
+- [ ] Check group synchronization
+
+### Provider Changes
+
+- [ ] Update client credentials
+- [ ] Modify redirect URIs
+- [ ] Test authentication flow
+- [ ] Update user profiles
+- [ ] Verify permissions
+
+## Monitoring
+
+### Key Metrics
+
+- Authentication success rate
+- Token refresh success rate
+- User profile sync status
+- Group synchronization status
+- Error rates by provider
+
+### Log Locations
+
+- Supabase Auth logs
+- Application error logs
+- Provider-specific logs
+- Network request logs
+
+## Support Resources
+
+- [Supabase Auth Documentation](https://supabase.com/docs/guides/auth)
+- [Azure AD Documentation](https://docs.microsoft.com/en-us/azure/active-directory/)
+- [Google OAuth Documentation](https://developers.google.com/identity/protocols/oauth2)
+- [Template OAuth Guide](docs/oauth-integration-guide.md)

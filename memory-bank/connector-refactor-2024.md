@@ -2,7 +2,7 @@
 
 ## Overview
 
-Completed a major architectural refactor of the social sync connectors to eliminate code duplication, standardize patterns, and improve maintainability while preserving all existing functionality.
+Completed a major architectural refactor of the social sync connectors to eliminate code duplication, standardize patterns, and improve maintainability while preserving all existing functionality. This refactor aligns with the internal tools template architecture and OAuth integration patterns.
 
 ## Problems Addressed
 

@@ -57,10 +57,10 @@
   </head>
   <body>
     <div class="container">
-      <h1 class="heading">StreamTrack</h1>
-      <h2>Sign in to StreamTrack</h2>
-      <p>Click the button below to securely sign in to your StreamTrack account:</p>
-      <a href="{{ .ConfirmationURL }}" class="button">Sign In to StreamTrack</a>
+      <h1 class="heading">{{ .AppName }}</h1>
+      <h2>Sign in to {{ .AppName }}</h2>
+      <p>Click the button below to securely sign in to your {{ .AppName }} account:</p>
+      <a href="{{ .ConfirmationURL }}" class="button">Sign In to {{ .AppName }}</a>
       <p>If you can't click the button, copy and paste this link into your browser:</p>
       <p class="link-text">{{ .ConfirmationURL }}</p>
       <div class="footer">

@@ -10,6 +10,13 @@
 - User session handling
 - Password reset functionality
 - Security audit logging
+- **OAuth Setup Documentation (2024-01-15)**
+  - Comprehensive Microsoft OAuth setup guide with Azure Portal navigation
+  - Complete Google OAuth setup guide with Google Cloud Console instructions
+  - Troubleshooting sections for common OAuth issues
+  - Security best practices and production deployment checklists
+  - Environment variable configuration examples
+  - Location: `docs/guides/` directory
 
 ### Premium Configuration System
 
@@ -97,6 +104,45 @@
 - Better error messaging needed
 
 ## Recently Fixed Issues ✅
+
+### Settings & Team Management
+
+- **Replaced Teams page with Settings page (2024-01-15)**
+  - Created new Settings page with tabbed interface for Team Management and System Settings
+  - Restricted access to admins and super admins only
+  - Moved all team management functionality from /teams to /settings
+  - Added proper permission checks with `canManageTeams` logic
+  - Updated navigation to remove /teams route and point to /settings
+  - Added super admin indicator and enhanced UI for role-based access
+  - Deleted old teams page and directory structure
+
+### UI/UX Improvements
+
+- **Fixed double header problem (2024-01-15)**
+  - Removed duplicate AuthHeader from PageLayout component
+  - Simplified PageLayout to only provide content container
+  - Updated all pages to remove title prop from PageLayout
+  - Deleted unused AuthHeader component since DashboardNav already provides all header functionality
+  - Eliminated redundant header that was causing visual duplication
+
+- **Fixed content overlap with fixed header (2024-01-15)**
+  - Added top padding of 64px to main content area to account for fixed header height
+  - Changed from `p: 3` to `pt: '64px', px: 3, pb: 3` to provide proper spacing
+  - Ensured content starts below the fixed header and doesn't get hidden
+  - Maintained responsive design and proper spacing on all screen sizes
+
+- **Fixed duplicate header in Settings page (2024-01-15)**
+  - Removed duplicate "Settings" title from page content since DashboardNav already shows it
+  - Kept super admin indicator but moved it to a cleaner position
+  - Eliminated redundant page header that was duplicating the navigation header
+  - Applied RLS policy updates to restrict team creation to super admins only
+
+- **Fixed ambiguous team_id reference in database RLS policies (2024-01-15)**
+  - Created migration to fix "column reference 'team_id' is ambiguous" error in teams table
+  - Updated RLS policy "Users can view teams they are members of" with explicit table aliases
+  - Changed from ambiguous `team_members.team_id` to explicit `tm.team_id` with table alias
+  - Applied migration successfully to resolve database query errors
+  - Fixed issue that was preventing team data from loading in the application
 
 ### Authentication
 

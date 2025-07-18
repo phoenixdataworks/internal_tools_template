@@ -36,6 +36,7 @@ StreamTrack is a real-time stream monitoring and analytics platform for content 
    - Account creation with OAuth options (Azure AD, Google)
    - Platform connection via OAuth integrations
    - Team creation and member invitation
+   - Comprehensive setup guides available in `docs/guides/`
 
 2. **Monitoring Setup**
    - Channel selection and configuration

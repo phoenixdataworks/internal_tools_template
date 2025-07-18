@@ -11,9 +11,6 @@ SET row_security = off;
 SET default_tablespace = '';
 SET default_table_access_method = "heap";
 
-CREATE SCHEMA IF NOT EXISTS "private";
-ALTER SCHEMA "private" OWNER TO "postgres";
-
 COMMENT ON SCHEMA "public" IS 'standard public schema';
 
 CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA "extensions";

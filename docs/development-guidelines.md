@@ -1,4 +1,4 @@
-# StreamTrack - Development Guidelines
+# Internal Tools Template - Development Guidelines
 
 ## Code Style & Standards
 
@@ -99,70 +99,193 @@ export function ProfileCard(props: any) {
 
 ```typescript
 // ✅ Good
-function useStreamMetrics(streamId: string) {
-  const [metrics, setMetrics] = useState<StreamMetrics | null>(null);
+function useTeamData(teamId: string) {
+  const [team, setTeam] = useState<Team | null>(null);
 
   useEffect(() => {
-    const subscription = supabase
-      .channel(`stream-${streamId}`)
-      .subscribe(metrics => setMetrics(metrics));
+    const subscription = supabase.channel(`team-${teamId}`).subscribe(team => setTeam(team));
 
     return () => subscription.unsubscribe();
-  }, [streamId]);
+  }, [teamId]);
 
-  return metrics;
+  return team;
 }
 
 // ❌ Bad
-function useStreamMetrics(streamId: string) {
-  const [metrics, setMetrics] = useState<any>(null);
+function useTeamData(teamId: string) {
+  const [team, setTeam] = useState<any>(null);
 
   useEffect(() => {
-    supabase.channel(`stream-${streamId}`).subscribe(metrics => setMetrics(metrics));
+    supabase.channel(`team-${teamId}`).subscribe(team => setTeam(team));
   }, []); // Missing dependency
 
-  return metrics;
+  return team;
 }
 ```
 
-### Python Guidelines
+3. **Context Usage**
 
-1. **Type Hints**
+```typescript
+// ✅ Good
+export function TeamProvider({ children }: { children: React.ReactNode }) {
+  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
 
-```python
-# ✅ Good
-from typing import Optional, Dict, List
+  const value = useMemo(() => ({
+    currentTeam,
+    setCurrentTeam,
+  }), [currentTeam]);
 
-def process_stream_data(
-    stream_id: str,
-    metrics: Dict[str, float]
-) -> Optional[Dict[str, float]]:
-    pass
+  return (
+    <TeamContext.Provider value={value}>
+      {children}
+    </TeamContext.Provider>
+  );
+}
 
-# ❌ Bad
-def process_stream_data(stream_id, metrics):
-    pass
+// ❌ Bad
+export function TeamProvider({ children }: { children: React.ReactNode }) {
+  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
+
+  return (
+    <TeamContext.Provider value={{ currentTeam, setCurrentTeam }}>
+      {children}
+    </TeamContext.Provider>
+  );
+}
 ```
 
-2. **Error Handling**
+### Template Component Guidelines
 
-```python
-# ✅ Good
-try:
-    response = api.get_stream_metrics(stream_id)
-except ApiError as e:
-    logger.error(f"API Error: {e}")
-    raise
-except Exception as e:
-    logger.error(f"Unexpected error: {e}")
-    raise
+1. **Using Template Components**
 
-# ❌ Bad
-try:
-    response = api.get_stream_metrics(stream_id)
-except:
-    logger.error("Error occurred")
-    pass
+```typescript
+// ✅ Good: Use template components as-is
+import { ThreadList } from '@/components/chat';
+
+export const MyPage = () => {
+  return (
+    <div>
+      <ThreadList teamId="team-123" />
+    </div>
+  );
+};
+
+// ✅ Good: Create wrapper components
+interface CustomThreadListProps {
+  teamId: string;
+  customFilter?: string;
+}
+
+export const CustomThreadList: React.FC<CustomThreadListProps> = ({
+  teamId,
+  customFilter,
+  ...props
+}) => {
+  const filteredTeamId = customFilter ? `${teamId}-${customFilter}` : teamId;
+
+  return <ThreadList teamId={filteredTeamId} {...props} />;
+};
+```
+
+2. **Creating Custom Components**
+
+```typescript
+// ✅ Good: Create in designated directories
+// src/components/custom/MyCustomComponent.tsx
+interface MyCustomComponentProps {
+  data: any[];
+  onAction: (item: any) => void;
+}
+
+export const MyCustomComponent: React.FC<MyCustomComponentProps> = ({
+  data,
+  onAction,
+}) => {
+  return (
+    <div>
+      {data.map(item => (
+        <button key={item.id} onClick={() => onAction(item)}>
+          {item.name}
+        </button>
+      ))}
+    </div>
+  );
+};
+```
+
+### API Development Guidelines
+
+1. **Template API Usage**
+
+```typescript
+// ✅ Good: Use template APIs as-is
+const response = await fetch('/api/teams', {
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  credentials: 'include',
+});
+
+const teams = await response.json();
+```
+
+2. **Creating Custom APIs**
+
+```typescript
+// ✅ Good: Create in designated directory
+// src/app/api/custom/my-endpoint/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+
+export async function GET(request: NextRequest) {
+  const supabase = createRouteHandlerClient({ cookies });
+
+  // Verify authentication
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Custom API logic
+  return NextResponse.json({ message: 'Custom API' });
+}
+```
+
+### Database Guidelines
+
+1. **Template Database Usage**
+
+```typescript
+// ✅ Good: Use template tables
+const { data: teams } = await supabase.from('teams').select('*').eq('id', teamId);
+```
+
+2. **Creating Custom Tables**
+
+```sql
+-- ✅ Good: Create custom tables in new migrations
+CREATE TABLE custom_business_data (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  data JSONB,
+  created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Follow template RLS patterns
+CREATE POLICY "Team members can access custom data" ON custom_business_data
+  FOR ALL USING (
+    team_id IN (
+      SELECT team_id FROM team_members
+      WHERE user_id = auth.uid()
+    )
+  );
 ```
 
 ## Testing Standards
@@ -173,6 +296,9 @@ except:
 
 ```typescript
 // ✅ Good
+import { render, screen } from '@testing-library/react';
+import { ProfileCard } from '@/components/custom/ProfileCard';
+
 describe('ProfileCard', () => {
   it('renders user information correctly', () => {
     const user = {
@@ -181,15 +307,9 @@ describe('ProfileCard', () => {
       email: 'john@example.com'
     };
 
-    const { getByText } = render(<ProfileCard user={user} />);
-    expect(getByText('John Doe')).toBeInTheDocument();
+    render(<ProfileCard user={user} />);
+    expect(screen.getByText('John Doe')).toBeInTheDocument();
   });
-});
-
-// ❌ Bad
-test('ProfileCard works', () => {
-  render(<ProfileCard user={{}} />);
-  // No assertions
 });
 ```
 
@@ -197,294 +317,247 @@ test('ProfileCard works', () => {
 
 ```typescript
 // ✅ Good
-describe('useStreamMetrics', () => {
-  it('subscribes to stream updates', async () => {
-    const { result } = renderHook(() => useStreamMetrics('stream-1'));
+import { renderHook, waitFor } from '@testing-library/react';
+import { useTeamData } from '@/hooks/useTeamData';
+
+describe('useTeamData', () => {
+  it('fetches team data', async () => {
+    const { result } = renderHook(() => useTeamData('team-123'));
+
     await waitFor(() => {
-      expect(result.current).not.toBeNull();
+      expect(result.current).toBeDefined();
     });
   });
 });
+```
 
-// ❌ Bad
-test('useStreamMetrics', () => {
-  renderHook(() => useStreamMetrics('stream-1'));
-  // No assertions or async handling
+### API Testing
+
+```typescript
+// ✅ Good
+import { GET } from '@/app/api/custom/my-endpoint/route';
+
+describe('Custom API', () => {
+  it('returns 401 for unauthenticated requests', async () => {
+    const request = new Request('http://localhost:3000/api/custom/my-endpoint');
+    const response = await GET(request);
+
+    expect(response.status).toBe(401);
+  });
 });
 ```
-
-### Backend Testing
-
-1. **API Tests**
-
-```python
-# ✅ Good
-@pytest.mark.asyncio
-async def test_stream_metrics():
-    stream_id = "test-stream"
-    metrics = {
-        "viewers": 100,
-        "chat_rate": 2.5
-    }
-
-    result = await process_stream_metrics(stream_id, metrics)
-    assert result["processed"] == True
-    assert result["metrics"]["viewers"] == 100
-
-# ❌ Bad
-def test_stream_metrics():
-    process_stream_metrics("test", {})
-    # No assertions
-```
-
-## Code Review Guidelines
-
-### Pull Request Requirements
-
-1. **Description Template**
-
-```markdown
-## Changes
-
-- Detailed list of changes
-
-## Testing
-
-- [ ] Unit tests added/updated
-- [ ] Integration tests added/updated
-- [ ] Manual testing performed
-
-## Screenshots
-
-(if applicable)
-
-## Related Issues
-
-Fixes #123
-```
-
-2. **Review Checklist**
-
-- Code follows style guidelines
-- Tests are comprehensive
-- Documentation is updated
-- No security vulnerabilities
-- Performance impact considered
 
 ## Security Guidelines
 
-### 1. Authentication
+### Authentication & Authorization
+
+1. **Always verify authentication in API routes**
 
 ```typescript
 // ✅ Good
-const { data: user, error } = await supabase.auth.getUser();
-if (!user) {
-  throw new AuthError('User not authenticated');
-}
+export async function GET(request: NextRequest) {
+  const supabase = createRouteHandlerClient({ cookies });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-// ❌ Bad
-const user = await supabase.auth.getUser();
-// No error handling
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // API logic here
+}
 ```
 
-### 2. Data Validation
+2. **Use RLS policies for data access**
+
+```sql
+-- ✅ Good: Template RLS pattern
+CREATE POLICY "Team members can access team data" ON teams
+  FOR SELECT USING (
+    id IN (
+      SELECT team_id FROM team_members
+      WHERE user_id = auth.uid()
+    )
+  );
+```
+
+### Input Validation
 
 ```typescript
-// ✅ Good
-const schema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
+// ✅ Good: Use Zod for validation
+import { z } from 'zod';
+
+const CreateTeamSchema = z.object({
+  name: z.string().min(1).max(100),
+  slug: z
+    .string()
+    .min(1)
+    .max(50)
+    .regex(/^[a-z0-9-]+$/),
 });
 
-const result = schema.safeParse(input);
-if (!result.success) {
-  throw new ValidationError(result.error);
-}
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+  const validatedData = CreateTeamSchema.parse(body);
 
-// ❌ Bad
-if (input.email && input.password) {
-  // Process input
+  // Use validated data
 }
 ```
 
 ## Performance Guidelines
 
-### 1. React Optimization
+### React Optimization
+
+1. **Use React.memo for expensive components**
 
 ```typescript
 // ✅ Good
-const MemoizedComponent = React.memo(({ data }) => (
-  <ExpensiveRenderer data={data} />
-));
+export const ExpensiveComponent = React.memo<ExpensiveComponentProps>(
+  ({ data, onAction }) => {
+    return (
+      <div>
+        {data.map(item => (
+          <ExpensiveItem key={item.id} item={item} onAction={onAction} />
+        ))}
+      </div>
+    );
+  }
+);
+```
 
-// ❌ Bad
-function ExpensiveComponent({ data }) {
-  return <ExpensiveRenderer data={data} />;
+2. **Optimize re-renders with useMemo and useCallback**
+
+```typescript
+// ✅ Good
+export function TeamDashboard({ teamId }: { teamId: string }) {
+  const [data, setData] = useState<TeamData[]>([]);
+
+  const filteredData = useMemo(() =>
+    data.filter(item => item.teamId === teamId),
+    [data, teamId]
+  );
+
+  const handleAction = useCallback((itemId: string) => {
+    // Action logic
+  }, []);
+
+  return (
+    <div>
+      {filteredData.map(item => (
+        <TeamItem key={item.id} item={item} onAction={handleAction} />
+      ))}
+    </div>
+  );
 }
 ```
 
-### 2. Database Queries
+### Database Optimization
 
-```typescript
-// ✅ Good
-const { data: streams } = await supabase
-  .from('streams')
-  .select('id, title, metrics:stream_metrics(viewer_count)')
-  .eq('is_active', true)
-  .limit(10);
+1. **Use proper indexes**
 
-// ❌ Bad
-const { data: streams } = await supabase.from('streams').select('*').eq('is_active', true);
+```sql
+-- ✅ Good: Add indexes for frequently queried columns
+CREATE INDEX idx_team_members_user_id ON team_members(user_id);
+CREATE INDEX idx_team_members_team_id ON team_members(team_id);
 ```
 
-## Deployment Guidelines
-
-### 1. Environment Configuration
+2. **Optimize queries**
 
 ```typescript
-// ✅ Good
-const config = {
-  apiUrl: process.env.NEXT_PUBLIC_API_URL,
-  stripeKey: process.env.STRIPE_SECRET_KEY,
-};
+// ✅ Good: Select only needed columns
+const { data } = await supabase.from('teams').select('id, name, slug').eq('id', teamId);
 
-if (!config.apiUrl || !config.stripeKey) {
-  throw new Error('Missing required environment variables');
+// ❌ Bad: Select all columns
+const { data } = await supabase.from('teams').select('*').eq('id', teamId);
+```
+
+## Template Integration Guidelines
+
+### Extension Points
+
+1. **Use designated extension directories**
+
+```
+src/
+├── extensions/           # Template extension points
+├── components/custom/    # Custom components
+├── features/            # Custom business features
+├── services/            # Custom business services
+└── types/custom/        # Custom type definitions
+```
+
+2. **Follow template patterns**
+
+```typescript
+// ✅ Good: Follow template component patterns
+interface CustomComponentProps {
+  teamId: string;
+  onSuccess?: () => void;
+  onError?: (error: Error) => void;
 }
 
-// ❌ Bad
-const config = {
-  apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000',
-  stripeKey: process.env.STRIPE_SECRET_KEY || 'default_key',
+export const CustomComponent: React.FC<CustomComponentProps> = ({ teamId, onSuccess, onError }) => {
+  // Implementation following template patterns
 };
 ```
 
-### 2. Build Process
+### Template Updates
+
+1. **Before updating template**
 
 ```bash
-# Production build steps
-npm run lint
+# Document current customizations
+git checkout -b backup-before-template-update
+git commit -m "Backup before template update"
+
+# Create update branch
+git checkout -b template-update-$(date +%Y%m%d)
+```
+
+2. **After template update**
+
+```bash
+# Test thoroughly
 npm run test
 npm run build
+npm run lint
+
+# Update documentation
+# Update memory-bank with changes
 ```
 
-## Documentation Guidelines
+## Code Review Checklist
 
-### 1. Component Documentation
+### Before Submitting
 
-````typescript
-/**
- * Displays stream metrics with real-time updates.
- *
- * @param streamId - The ID of the stream to monitor
- * @param refreshInterval - Update interval in milliseconds
- * @returns A component displaying stream metrics
- *
- * @example
- * ```tsx
- * <StreamMetrics
- *   streamId="123"
- *   refreshInterval={5000}
- * />
- * ```
- */
-export function StreamMetrics({ streamId, refreshInterval = 5000 }: StreamMetricsProps) {
-  // Implementation
-}
-````
+- [ ] Code follows TypeScript strict mode
+- [ ] All functions have proper type definitions
+- [ ] Error handling is implemented
+- [ ] Authentication is verified where needed
+- [ ] RLS policies are in place for new tables
+- [ ] Tests are written and passing
+- [ ] Documentation is updated
+- [ ] Code follows template patterns
+- [ ] No template files are modified
+- [ ] Custom code is in designated directories
 
-### 2. API Documentation
+### Review Points
 
-````typescript
-/**
- * Fetches stream analytics for a given time period.
- *
- * @param streamId - The ID of the stream
- * @param startTime - Start of the period (ISO string)
- * @param endTime - End of the period (ISO string)
- * @returns Stream analytics data
- * @throws {ApiError} If the API request fails
- *
- * @example
- * ```typescript
- * const analytics = await getStreamAnalytics(
- *   "stream-123",
- *   "2024-01-01T00:00:00Z",
- *   "2024-01-02T00:00:00Z"
- * );
- * ```
- */
-async function getStreamAnalytics(
-  streamId: string,
-  startTime: string,
-  endTime: string
-): Promise<StreamAnalytics> {
-  // Implementation
-}
-````
+- [ ] Security: Authentication, authorization, input validation
+- [ ] Performance: Query optimization, component optimization
+- [ ] Maintainability: Code organization, naming conventions
+- [ ] Testing: Coverage, edge cases, error scenarios
+- [ ] Documentation: API docs, component docs, setup instructions
+- [ ] Template Integration: Proper extension points, no template modifications
 
-## Version Control Guidelines
+## Best Practices Summary
 
-### 1. Commit Messages
-
-```
-feat(monitoring): add real-time viewer count updates
-
-- Add WebSocket subscription for viewer counts
-- Implement auto-reconnection logic
-- Add error handling for connection failures
-
-Fixes #123
-```
-
-### 2. Branch Naming
-
-```
-feature/real-time-monitoring
-bugfix/connection-timeout
-hotfix/security-vulnerability
-```
-
-## Monitoring Guidelines
-
-### 1. Error Tracking
-
-```typescript
-// ✅ Good
-try {
-  await processStream(streamId);
-} catch (error) {
-  logger.error('Stream processing failed', {
-    streamId,
-    error: error.message,
-    stack: error.stack,
-  });
-  throw error;
-}
-
-// ❌ Bad
-try {
-  await processStream(streamId);
-} catch (error) {
-  console.error(error);
-}
-```
-
-### 2. Performance Monitoring
-
-```typescript
-// ✅ Good
-const startTime = performance.now();
-await processStream(streamId);
-const duration = performance.now() - startTime;
-
-logger.info('Stream processing completed', {
-  streamId,
-  duration,
-  timestamp: new Date().toISOString(),
-});
-
-// ❌ Bad
-await processStream(streamId);
-// No performance tracking
-```
+1. **Never modify template files directly**
+2. **Use designated extension points for customization**
+3. **Follow template patterns for consistency**
+4. **Maintain security through RLS and authentication**
+5. **Write comprehensive tests for custom code**
+6. **Document custom functionality thoroughly**
+7. **Optimize for performance and maintainability**
+8. **Keep custom code modular and reusable**
