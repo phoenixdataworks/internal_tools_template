@@ -1,0 +1,13 @@
+.git
+.gitignore
+node_modules
+npm-debug.log
+README.md
+.next
+.vscode
+.idea
+*.log
+coverage
+test-results
+.DS_Store
+**.pyc

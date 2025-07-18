@@ -1,0 +1,35 @@
+node_modules
+# Next.js build output
+.next
+
+# SWC compilation cache
+.swc/
+.env
+.venv
+**.pyc
+**__pycache__**
+
+# Supabase
+/supabase/.temp
+/supabase/config.toml
+*.tsbuildinfo
+**.cache
+
+.DS_Store
+__blobstorage__ # Azure Functions
+# Azurite Files
+__azurite_db_blob_extent__.json
+__azurite_db_blob__.json
+__azurite_db_queue__.json
+__azurite_db_table__.json
+__azurite_db_queue_extent__.json
+__blobstorage__
+__queuestorage__
+.vscode/*
+
+**/local.settings.json
+*.log
+.vercel
+./azure_functions/**/local.settings.json
+./azure_functions/**/venv
+**/data/**

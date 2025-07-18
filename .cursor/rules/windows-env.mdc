@@ -1,0 +1,6 @@
+---
+description:
+globs: cmd
+alwaysApply: false
+---
+- The development environment is Windows 11. Use PowerShell commands.
