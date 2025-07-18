@@ -45,6 +45,9 @@ ALTER TABLE public.team_join_requests ENABLE ROW LEVEL SECURITY;
 CREATE OR REPLACE FUNCTION public.is_user_in_teams(team_ids uuid[])
 RETURNS BOOLEAN AS $$
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     RETURN EXISTS (
         SELECT 1 FROM public.team_members tm
         WHERE tm.team_id = ANY(team_ids)
@@ -57,6 +60,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.is_team_admin(team_id uuid)
 RETURNS BOOLEAN AS $$
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     RETURN EXISTS (
         SELECT 1 FROM public.team_members tm
         WHERE tm.team_id = team_id
@@ -70,6 +76,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.is_team_member(team_id uuid)
 RETURNS BOOLEAN AS $$
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     RETURN EXISTS (
         SELECT 1 FROM public.team_members tm
         WHERE tm.team_id = team_id
@@ -82,6 +91,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.is_team_creator(team_id uuid)
 RETURNS BOOLEAN AS $$
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     RETURN EXISTS (
         SELECT 1 FROM public.teams t
         WHERE t.id = team_id
@@ -93,6 +105,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.is_super_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     RETURN EXISTS (
         SELECT 1 FROM public.profiles
         WHERE id = auth.uid()

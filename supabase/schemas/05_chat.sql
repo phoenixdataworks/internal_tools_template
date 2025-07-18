@@ -5,6 +5,9 @@
 CREATE OR REPLACE FUNCTION public.is_owner(user_id uuid)
 RETURNS BOOLEAN AS $$
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     RETURN user_id = auth.uid();
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -12,6 +15,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
@@ -20,6 +26,9 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION public.handle_new_comment()
 RETURNS TRIGGER AS $$
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     -- Update the thread's updated_at timestamp when a new comment is added
     UPDATE public.chat_threads 
     SET updated_at = NOW() 

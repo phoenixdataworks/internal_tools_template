@@ -22,6 +22,9 @@ DECLARE
     user_domain TEXT;
     allowed_domains TEXT[];
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     -- Get user email from JWT
     user_email := auth.jwt() ->> 'email';
     
@@ -73,6 +76,9 @@ CREATE POLICY "Users can create their own profile" ON public.profiles
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     NEW.updated_at = NOW();
     RETURN NEW;
 END;

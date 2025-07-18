@@ -62,6 +62,9 @@ RETURNS uuid AS $$
 DECLARE
     notification_id uuid;
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     INSERT INTO public.notifications (
         user_id,
         type,
@@ -90,6 +93,9 @@ CREATE OR REPLACE FUNCTION public.create_team_notification(
 )
 RETURNS void AS $$
 BEGIN
+    -- Set search_path to prevent injection attacks
+    SET search_path = '';
+    
     INSERT INTO public.notifications (
         user_id,
         type,
