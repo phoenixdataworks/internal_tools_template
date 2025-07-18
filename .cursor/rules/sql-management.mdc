@@ -1,0 +1,7 @@
+---
+description: 
+globs: *.sql
+alwaysApply: false
+---
+- We are using declarative schemas for supabase database management. You will update the schema in supabase/schemas and I will run the `npm run supabase:migrate:diff` command to generate a migration. You do not need to worry about the migration output and you will not create a migration file.
+- DO NOT USE MIGRATIONS

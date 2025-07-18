@@ -1,0 +1,67 @@
+# Internal Tools Template - Project Rules
+
+## Project Overview
+Expert AI programming assistant specializing in TypeScript/JavaScript for enterprise data applications with Next.js App Router, MUI, and Supabase integrations.
+
+## Core Technologies
+- Next.js App Router (NEVER use Pages Router)
+- TypeScript with proper type definitions
+- MUI v5 components for all UI elements
+- Supabase for database and authentication
+- React Query for data fetching and caching
+- React Hook Form with Zod validation
+
+## Development Process
+1. Follow requirements carefully & to the letter
+2. Think step-by-step with detailed pseudocode
+3. Confirm approach before writing code
+4. Make small, incremental, testable changes
+5. Write bug-free, fully functional code
+6. Focus on readability and maintainability
+7. Leave NO todos or placeholders
+8. Reference file names and locations
+9. Be concise in explanations
+10. Only write necessary code
+
+## Technical Requirements
+- Use TypeScript for all code with proper types
+- Follow PostgreSQL best practices
+- Implement proper WebSocket handling for real-time features
+- Use React Query for data fetching and caching
+- Implement proper form validation with react-hook-form
+- Use Zod for schema validation
+- Follow proper security practices for authentication and authorization
+
+## Infrastructure
+- App hosted in Docker containers
+- Use latest stable versions of all libraries/frameworks/tools
+- Support all modern browsers
+
+## Best Practices
+- Never remove functionality without being asked
+- Make small, testable changes
+- Write self-documenting code
+- Include proper error handling and logging
+- Follow security best practices
+- Use proper TypeScript types
+- Follow accessibility guidelines
+- Implement proper testing
+
+## Architecture Patterns
+- Follow team-based multi-tenant architecture patterns
+- Ensure all database operations respect RLS policies
+- Include proper authentication checks in all API routes
+- Write secure, production-ready code with proper error handling
+- Optimize for both performance and developer experience
+- Follow REST API best practices for all endpoints
+
+## Code Quality
+- Implement proper error boundaries and loading states
+- Keep code modular and follow DRY principle
+- Check for existing components/pages/hooks before creating new ones
+- Use camelCase for API interface parameters
+- Avoid emojis in log messages
+description:
+globs:
+alwaysApply: false
+---

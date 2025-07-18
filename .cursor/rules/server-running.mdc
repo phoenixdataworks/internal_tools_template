@@ -1,0 +1,6 @@
+---
+description:
+globs: *.tsc
+alwaysApply: false
+---
+- Do not run the server, it is already running.

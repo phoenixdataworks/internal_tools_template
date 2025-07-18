@@ -1,0 +1,6 @@
+---
+description: 
+globs: *.tsx
+alwaysApply: false
+---
+We are using the latest version of supabase, which uses @supabase/ssr not @supabase/auth-helpers-react.

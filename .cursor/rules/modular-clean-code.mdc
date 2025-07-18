@@ -1,0 +1,15 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- Keep the code modular.
+- Follow the DRY (Don't Repeat Yourself) Principle and Avoid Duplicating Code or Logic.
+- Avoid writing the same code more than once. Instead, reuse your code using functions, classes, modules, libraries, or other abstractions.
+- Modify code in one place if you need to change or update it.
+- Keep files less than 500 lines.
+- Make small changes when updating code.
+- Keep business logic simple and maintainable.
+- Do not be lazy. In Plan mode, offer the best architectural recommendation. In Agent mode, fully implement code. Do not leave stubs or todos.
+- Do not add emojis in log messages.
+- Use camelCase for API interface parameters.

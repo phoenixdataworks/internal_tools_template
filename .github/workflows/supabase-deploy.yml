@@ -1,0 +1,96 @@
+name: Deploy Supabase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/functions/**/*.ts'
+      - 'supabase/functions/**/*.js'
+      - 'supabase/functions/**/package.json'
+      - 'supabase/seed.sql'
+      - 'supabase/config.template.toml'
+      - '.github/workflows/supabase-deploy.yml'
+      - 'supabase/scripts/generate-config.ts'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'Production' || 'Development' }}
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ vars.SUPABASE_PROJECT_ID }}
+      SITE_URL: ${{ vars.SITE_URL }}
+      DEV_SITE_URL: ${{ vars.DEV_SITE_URL }}
+      AUTH_REDIRECT_URL: ${{ vars.AUTH_REDIRECT_URL }}
+      AUTH_CALLBACK_URL: ${{ vars.AUTH_CALLBACK_URL }}
+      SUPABASE_API_URL: ${{ vars.SUPABASE_API_URL }}
+      GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+      AZURE_AD_CLIENT_ID: ${{ secrets.AZURE_AD_CLIENT_ID }}
+      AZURE_AD_CLIENT_SECRET: ${{ secrets.AZURE_AD_CLIENT_SECRET }}
+      AZURE_AD_TENANT_URL: ${{ vars.AZURE_AD_TENANT_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      NODE_ENV: ${{ vars.NODE_ENV }}
+      SMTP_HOST: ${{ vars.SMTP_HOST }}
+      SMTP_PORT: ${{ vars.SMTP_PORT }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASS: ${{ secrets.SMTP_PASS }}
+      SMTP_FROM_EMAIL: ${{ vars.SMTP_FROM_EMAIL }}
+      SMTP_FROM_NAME: ${{ vars.SMTP_FROM_NAME }}
+      NEXT_PUBLIC_LINK_ALLOWED_DOMAINS: ${{ vars.NEXT_PUBLIC_LINK_ALLOWED_DOMAINS }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --include=dev
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Generate config.toml from template
+        run: npm run supabase:config
+
+      - name: Link to Supabase project
+        run: |
+          supabase link --project-ref $SUPABASE_PROJECT_ID
+
+      - name: Deploy Supabase config
+        run: |
+          cd supabase
+          supabase config push
+
+      - name: Deploy migrations
+        if: ${{ hashFiles('supabase/migrations/**') != '' }}
+        run: |
+          supabase db push
+
+      - name: Deploy Edge Functions
+        if: ${{ hashFiles('supabase/functions/**/*.ts', 'supabase/functions/**/*.js') != '' }}
+        run: |
+          cd supabase
+          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID
+
+      - name: Set Function Secrets
+        env:
+          NEXT_PUBLIC_LINK_ALLOWED_DOMAINS: ${{ secrets.NEXT_PUBLIC_LINK_ALLOWED_DOMAINS }}
+        run: |
+          supabase secrets set \
+            NEXT_PUBLIC_LINK_ALLOWED_DOMAINS="$NEXT_PUBLIC_LINK_ALLOWED_DOMAINS" \
+            --project-ref $SUPABASE_PROJECT_ID
+
+      - name: Run post-deployment tests
+        run: |
+          cd supabase
+          supabase db test --db-url "postgres://postgres.${SUPABASE_PROJECT_ID}:${SUPABASE_DB_PASSWORD}@aws-0-us-west-1.pooler.supabase.com:5432/postgres"

@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ .Subject }}</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f9f9f9;
+      }
+      .container {
+        background-color: #ffffff;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .logo {
+        max-width: 200px;
+        margin-bottom: 20px;
+      }
+      .heading {
+        color: #1976d2;
+        margin-top: 0;
+        margin-bottom: 24px;
+      }
+      .button {
+        display: inline-block;
+        padding: 12px 24px;
+        background-color: #1976d2;
+        color: white !important;
+        text-decoration: none;
+        border-radius: 4px;
+        margin: 20px 0;
+        font-weight: bold;
+      }
+      .button:hover {
+        background-color: #1565c0;
+      }
+      .footer {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+        font-size: 12px;
+        color: #666;
+      }
+      .link-text {
+        word-break: break-all;
+        color: #1976d2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="heading">StreamTrack</h1>
+      <h2>Verify Your Email</h2>
+      <p>Hello,</p>
+      <p>Please click the button below to verify your email address:</p>
+      <a href="{{ .ConfirmationURL }}" class="button">Verify Email</a>
+      <p>If you can't click the button, copy and paste this link into your browser:</p>
+      <p class="link-text">{{ .ConfirmationURL }}</p>
+      <div class="footer">
+        <p>This verification link will expire in 24 hours.</p>
+        <p>If you didn't create an account, you can safely ignore this email.</p>
+      </div>
+    </div>
+  </body>
+</html>
