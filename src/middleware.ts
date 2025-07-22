@@ -150,6 +150,49 @@ export async function middleware(request: NextRequest) {
         !PUBLIC_API_PATHS.some(path => request.nextUrl.pathname.startsWith(path))) ||
       isAuthenticatedPath;
 
+    // --- SESSION EXPIRED HANDLING ---
+    // Only run for protected paths
+    if (isProtectedPath && !user) {
+      // Check for Supabase refresh token cookie
+      const refreshTokenCookie = request.cookies
+        .getAll()
+        .find(c => c.name.startsWith('sb-refresh-token'));
+      let sessionExpired = false;
+      if (refreshTokenCookie) {
+        // Try to refresh session by calling getUser again (Supabase SSR client should auto-refresh if possible)
+        try {
+          const {
+            data: { user: refreshedUser },
+            error: refreshError,
+          } = await supabase.auth.getUser();
+          if (!refreshedUser) {
+            sessionExpired = true;
+          }
+        } catch (e) {
+          sessionExpired = true;
+        }
+      }
+      // If no refresh token, treat as not authenticated (current logic)
+      if (sessionExpired || refreshTokenCookie) {
+        // Clear all Supabase cookies
+        const response = request.nextUrl.pathname.startsWith('/api/')
+          ? NextResponse.json({ error: 'Session expired' }, { status: 401 })
+          : NextResponse.redirect(
+              new URL(
+                `/signin?error=${encodeURIComponent('Session expired')}&redirectTo=${encodeURIComponent(request.nextUrl.pathname + request.nextUrl.search)}`,
+                request.url
+              )
+            );
+        request.cookies.getAll().forEach(c => {
+          if (c.name.startsWith('sb-')) {
+            response.cookies.set(c.name, '', { maxAge: 0, path: '/' });
+          }
+        });
+        return response;
+      }
+      // If no refresh token and no user, fall through to existing logic (API: 401, page: redirect)
+    }
+
     if (isProtectedPath) {
       // For API routes, return 401 if not authenticated
       if (request.nextUrl.pathname.startsWith('/api/')) {
